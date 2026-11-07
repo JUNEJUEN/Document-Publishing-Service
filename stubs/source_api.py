@@ -9,6 +9,8 @@ from typing import Literal
 from fastapi import FastAPI, HTTPException, Response
 from pydantic import BaseModel
 
+from stub_storage import save_json
+
 SERVICE = "source"
 
 
@@ -76,13 +78,7 @@ def save(path: Path, docs: dict[str, StoredDocument]) -> None:
         row = asdict(doc)
         row["content"] = None if doc.content is None else base64.b64encode(doc.content).decode()
         rows.append(row)
-    # Temp file, fsync, rename: the saved file is never half-written.
-    tmp = path.with_name(path.name + ".tmp")
-    with open(tmp, "w", encoding="utf-8") as fh:
-        json.dump(rows, fh, indent=2)
-        fh.flush()
-        os.fsync(fh.fileno())
-    os.replace(tmp, path)
+    save_json(path, rows)
 
 
 def create_app(seed: int = 20, data_file: Path | None = None, events: list | None = None) -> FastAPI:
