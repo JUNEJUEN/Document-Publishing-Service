@@ -153,3 +153,11 @@ async def test_rejected_login_is_readable_by_the_web_app(api):
     response = await api.post("/oauth/token", data={"client_id": "x", "client_secret": "y"}, headers={"Origin": WEB})
     assert response.status_code == 401
     assert response.headers["access-control-allow-origin"] == WEB
+
+
+@pytest.mark.parametrize("method, path", [("GET", "/documents")])
+async def test_protected_endpoints_need_a_token(api, source_events, method, path):
+    response = await api.request(method, path)
+    assert response.status_code == 401
+    assert response.headers["www-authenticate"] == "Bearer"
+    assert source_events == []  # rejected before any work

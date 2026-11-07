@@ -25,3 +25,9 @@ button.secondary { background: transparent; color: var(--accent); border: 1px so
 .error { color: var(--bad); }
 .muted { color: var(--muted); }
 .notice { background: var(--wait-bg); padding: 8px 12px; border-radius: 6px; }
+.card-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 8px; }
+.card-head h2 { margin: 0; }
+table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--border); }
+td { overflow-wrap: anywhere; }
+.table-scroll { overflow-x: auto; }

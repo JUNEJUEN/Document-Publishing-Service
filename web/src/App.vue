@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DocumentsTable from './components/DocumentsTable.vue'
 import LoginForm from './components/LoginForm.vue'
 import { logout, session } from './session'
 </script>
@@ -14,8 +15,6 @@ import { logout, session } from './session'
     </header>
     <p v-if="session.notice" class="notice">{{ session.notice }}</p>
     <LoginForm v-if="!session.token" />
-    <section v-else class="card">
-      <p class="muted">Documents and jobs will appear here.</p>
-    </section>
+    <DocumentsTable v-else />
   </main>
 </template>

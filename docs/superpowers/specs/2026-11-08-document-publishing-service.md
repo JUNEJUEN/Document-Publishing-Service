@@ -564,7 +564,7 @@ The stubs have no tests of their own. The API tests run against the real stub ap
 | `TOKEN_TTL_SECONDS` | 300 | Token lifetime |
 | `SOURCE_API_URL`, `VENDOR_API_URL` | `http://source-stub:8001`, `http://vendor-stub:8002` | Upstream addresses |
 | `DATA_DIR` | `/data` | Archive and job files |
-| `HTTP_TIMEOUT` | 10 | Seconds per upstream call |
+| `HTTP_TIMEOUT` | 10 | Seconds allowed for each step of an upstream call (connect, read, write) |
 | `SOURCE_MAX_ATTEMPTS`, `VENDOR_MAX_ATTEMPTS` | 5, 5 | Quick attempts inside a run |
 | `RETRY_BASE_DELAY`, `RETRY_MAX_DELAY` | 0.5, 8 | Backoff, in seconds |
 | `AUTO_RETRY_INTERVAL` | 3600 | Seconds between retry cron runs |
@@ -574,7 +574,7 @@ The stubs have no tests of their own. The API tests run against the real stub ap
 
 The API refuses to start when a required setting is missing. Tests pass their own values.
 
-Compose supplies the required settings with demo defaults, and the API's own defaults cover the rest, so no `.env` file is needed. `.env.example`, which is committed to git, lists the values worth overriding: `CLIENT_ID`, `CLIENT_SECRET`, `TOKEN_SECRET`, and `VENDOR_FAILURE_RATE` (passed to the vendor stub as `FAILURE_RATE`). Copying it to `.env`, which git and Docker ignore, changes them for `docker compose`.
+Compose supplies the required settings with demo defaults, and the API's own defaults cover the rest, so no `.env` file is needed. `.env.example`, which is committed to git, lists the values worth overriding: `CLIENT_ID`, `CLIENT_SECRET`, `TOKEN_SECRET`, `TOKEN_TTL_SECONDS` (a short value helps test token renewal), and `VENDOR_FAILURE_RATE` (passed to the vendor stub as `FAILURE_RATE`). Copying it to `.env`, which git and Docker ignore, changes them for `docker compose`.
 
 ## 11. Docker and CI
 

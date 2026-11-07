@@ -13,7 +13,7 @@ REQUIRED = {
 
 @pytest.fixture
 def env(monkeypatch):
-    for name in ("DATA_DIR", "TOKEN_TTL_SECONDS", "CORS_ORIGINS"):
+    for name in ("DATA_DIR", "TOKEN_TTL_SECONDS", "CORS_ORIGINS", "SOURCE_API_URL", "HTTP_TIMEOUT"):
         monkeypatch.delenv(name, raising=False)
     for name, value in REQUIRED.items():
         monkeypatch.setenv(name, value)
@@ -30,16 +30,30 @@ def test_defaults(env):
     assert settings.data_dir == Path("/data")
     assert settings.token_ttl_seconds == 300
     assert settings.cors_origins == ("http://localhost:8080",)
+    assert settings.source_api_url == "http://source-stub:8001"
+    assert settings.http_timeout == 10.0
 
 
 def test_optional_settings_come_from_environment(env, tmp_path):
     env.setenv("DATA_DIR", str(tmp_path))
     env.setenv("TOKEN_TTL_SECONDS", "60")
     env.setenv("CORS_ORIGINS", "http://a.test, http://b.test")
+    env.setenv("SOURCE_API_URL", "http://src.test")
+    env.setenv("HTTP_TIMEOUT", "2.5")
     settings = Settings.from_env()
     assert settings.data_dir == tmp_path
     assert settings.token_ttl_seconds == 60
     assert settings.cors_origins == ("http://a.test", "http://b.test")
+    assert settings.source_api_url == "http://src.test"
+    assert settings.http_timeout == 2.5
+
+
+def test_empty_values_fall_back_to_defaults(env):
+    env.setenv("SOURCE_API_URL", "")
+    env.setenv("DATA_DIR", "")
+    settings = Settings.from_env()
+    assert settings.source_api_url == "http://source-stub:8001"
+    assert settings.data_dir == Path("/data")
 
 
 def test_empty_cors_origins_fall_back_to_default(env):
@@ -51,6 +65,13 @@ def test_empty_cors_origins_fall_back_to_default(env):
 def test_token_lifetime_must_be_positive(env, ttl):
     env.setenv("TOKEN_TTL_SECONDS", ttl)
     with pytest.raises(ValueError, match="TOKEN_TTL_SECONDS"):
+        Settings.from_env()
+
+
+@pytest.mark.parametrize("timeout", ["0", "-1", "abc", "nan"])
+def test_http_timeout_must_be_positive(env, timeout):
+    env.setenv("HTTP_TIMEOUT", timeout)
+    with pytest.raises(ValueError, match="HTTP_TIMEOUT"):
         Settings.from_env()
 
 

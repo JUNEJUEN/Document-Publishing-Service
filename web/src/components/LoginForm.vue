@@ -1,18 +1,12 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { login, WrongCredentials } from '../session'
+import { errorMessage } from '../http'
+import { login } from '../session'
 
 const clientId = ref('')
 const clientSecret = ref('')
 const busy = ref(false)
 const error = ref('')
-
-function describe(e: unknown): string {
-  if (e instanceof WrongCredentials) return e.message
-  // fetch() throws a TypeError when the network request itself fails.
-  if (e instanceof TypeError) return 'Cannot reach the API. Please try again.'
-  return e instanceof Error ? e.message : String(e)
-}
 
 async function submit() {
   busy.value = true
@@ -20,7 +14,7 @@ async function submit() {
   try {
     await login(clientId.value, clientSecret.value)
   } catch (e) {
-    error.value = describe(e)
+    error.value = errorMessage(e)
   } finally {
     busy.value = false
   }

@@ -1,5 +1,6 @@
 import { reactive } from 'vue'
 import { API_URL } from './config'
+import { jsonField } from './http'
 
 interface Credentials {
   clientId: string
@@ -14,15 +15,14 @@ let credentials: Credentials | null = null
 // One renewal shared by all requests that got a 401 at the same time.
 let renewal: Promise<string> | null = null
 
-export class WrongCredentials extends Error {}
+class WrongCredentials extends Error {}
 
 async function requestToken(c: Credentials): Promise<string> {
   const body = new URLSearchParams({ client_id: c.clientId, client_secret: c.clientSecret })
   const res = await fetch(`${API_URL}/oauth/token`, { method: 'POST', body })
   if (res.status === 401) throw new WrongCredentials('Wrong client id or secret')
   if (!res.ok) throw new Error(`Login failed (HTTP ${res.status})`)
-  const data: unknown = await res.json().catch(() => null)
-  const token = (data as { access_token?: unknown } | null)?.access_token
+  const token = await jsonField(res, 'access_token')
   if (typeof token !== 'string' || !token) throw new Error('Login failed (bad token response)')
   return token
 }
