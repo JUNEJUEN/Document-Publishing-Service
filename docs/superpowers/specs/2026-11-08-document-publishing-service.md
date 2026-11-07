@@ -574,6 +574,8 @@ The stubs have no tests of their own. The API tests run against the real stub ap
 
 The API refuses to start when a required setting is missing. Tests pass their own values.
 
+Compose supplies the required settings with demo defaults, and the API's own defaults cover the rest, so no `.env` file is needed. `.env.example`, which is committed to git, lists the values worth overriding: `CLIENT_ID`, `CLIENT_SECRET`, `TOKEN_SECRET`, and `VENDOR_FAILURE_RATE` (passed to the vendor stub as `FAILURE_RATE`). Copying it to `.env`, which git and Docker ignore, changes them for `docker compose`.
+
 ## 11. Docker and CI
 
 ### Images
