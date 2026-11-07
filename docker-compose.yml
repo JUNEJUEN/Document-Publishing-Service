@@ -1,0 +1,68 @@
+services:
+  source-stub:
+    build:
+      context: .
+      dockerfile: docker/stubs.Dockerfile
+    command: ["uvicorn", "source_api:app", "--host", "0.0.0.0", "--port", "8001"]
+    ports: ["8001:8001"]
+    volumes:
+      - source-data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  vendor-stub:
+    build:
+      context: .
+      dockerfile: docker/stubs.Dockerfile
+    command: ["uvicorn", "vendor_api:app", "--host", "0.0.0.0", "--port", "8002"]
+    ports: ["8002:8002"]
+    volumes:
+      - vendor-data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    ports: ["8000:8000"]
+    volumes:
+      - publishing-data:/data
+    depends_on:
+      source-stub:
+        condition: service_healthy
+      vendor-stub:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+    ports: ["8080:8080"]
+    depends_on:
+      api:
+        condition: service_healthy
+
+  tests:
+    build:
+      context: .
+      dockerfile: docker/tests.Dockerfile
+    profiles: ["test"]
+    volumes:
+      - .:/workspace
+
+volumes:
+  publishing-data:
+  source-data:
+  vendor-data:
