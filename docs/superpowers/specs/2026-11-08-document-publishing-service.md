@@ -332,7 +332,8 @@ There is one API client (no user management). Its id and secret come from `CLIEN
 5. From then on, every API call carries `Authorization: Bearer <token>`.
 6. **The token lasts 300 s** (`TOKEN_TTL_SECONDS`). For silent renewal, the UI also keeps the id and secret in memory.
    - When any call gets a 401, the UI fetches a new token once and repeats the call.
-   - If that renewal fails too, the UI goes back to the login form with "Your session has expired. Please log in again."
+   - If the renewal is rejected (wrong id or secret), or the repeated call still gets a 401, the UI goes back to the login form with "Your session has expired. Please log in again."
+   - If the renewal fails because the API cannot be reached or answers 5xx, the UI stays logged in. The call returns its 401, and the next call tries to renew again. Callers must therefore treat a 401 while still logged in as a temporary error, not as a logout.
 7. **Log out:** the "Log out" button clears the token and the credentials from memory and shows the login form.
 8. **Page reload:** nothing is kept in browser storage, so a reload also clears everything and shows the login form.
 

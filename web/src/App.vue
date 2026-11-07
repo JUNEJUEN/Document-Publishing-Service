@@ -1,5 +1,21 @@
+<script setup lang="ts">
+import LoginForm from './components/LoginForm.vue'
+import { logout, session } from './session'
+</script>
+
 <template>
   <main>
-    <h1>Document publishing</h1>
+    <header>
+      <h1>Document publishing</h1>
+      <div v-if="session.token" class="who">
+        <span>Logged in as {{ session.clientId }}</span>
+        <button class="secondary" @click="logout()">Log out</button>
+      </div>
+    </header>
+    <p v-if="session.notice" class="notice">{{ session.notice }}</p>
+    <LoginForm v-if="!session.token" />
+    <section v-else class="card">
+      <p class="muted">Documents and jobs will appear here.</p>
+    </section>
   </main>
 </template>

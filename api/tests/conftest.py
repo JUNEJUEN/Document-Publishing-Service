@@ -8,7 +8,12 @@ from app.main import create_app
 
 @pytest.fixture
 def settings(tmp_path) -> Settings:
-    return Settings(data_dir=tmp_path)
+    return Settings(
+        client_id="test-client",
+        client_secret="test-secret",
+        token_secret="test-token-secret-0123456789abcdef",
+        data_dir=tmp_path,
+    )
 
 
 @pytest.fixture

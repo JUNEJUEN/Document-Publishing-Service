@@ -7,6 +7,7 @@ import uuid
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import Annotated
 
 from fastapi import FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
@@ -88,8 +89,8 @@ def create_app(
 
     @app.post("/files")
     async def receive(
-        file: UploadFile = File(...),
-        idempotency_key: str | None = Header(default=None),
+        file: Annotated[UploadFile, File()],
+        idempotency_key: Annotated[str | None, Header()] = None,
     ):
         events.append((SERVICE, "post", idempotency_key))
         app.state.attempts += 1

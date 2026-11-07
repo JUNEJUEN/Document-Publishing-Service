@@ -37,6 +37,11 @@ services:
     build:
       context: .
       dockerfile: docker/api.Dockerfile
+    environment:
+      CLIENT_ID: ${CLIENT_ID:-demo-client}
+      CLIENT_SECRET: ${CLIENT_SECRET:-demo-secret}
+      TOKEN_SECRET: ${TOKEN_SECRET:-local-demo-token-secret-change-me-0123456789}
+      CORS_ORIGINS: http://localhost:8080
     ports: ["8000:8000"]
     volumes:
       - publishing-data:/data
@@ -55,6 +60,8 @@ services:
     build:
       context: .
       dockerfile: docker/web.Dockerfile
+      args:
+        VITE_API_URL: http://localhost:8000
     ports: ["8080:8080"]
     depends_on:
       api:
