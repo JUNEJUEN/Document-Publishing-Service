@@ -397,7 +397,7 @@ Returned by the job endpoints.
 | | | | 401 | token problem (6) | `{"detail": "invalid or expired token"}` |
 | | | | 409 | this document's job record is unreadable (4.6) | `{"detail": "The job record for this document is unreadable; manual action needed"}` |
 | | | | 422 | body invalid; `documentId` must match `^[A-Za-z0-9_-][A-Za-z0-9._-]{0,127}$`; `requestId` 1–200 chars | `{"detail": [ … ]}`. The handler validates the body with the Pydantic model and raises `RequestValidationError`, so FastAPI returns its usual list. |
-| `GET /documents` | yes | — | 200 | Source answered | Source's metadata objects (7.3), unchanged and in Source's order: `[{"id": "doc-1", "filename": "doc-1.txt", "contentType": "text/plain", "size": 48, "deleted": false, "status": "Released", "statusMessage": null, "archiveUri": null, "archiveSha256": null}, …]` |
+| `GET /documents` | yes | — | 200 | Source answered | Source's metadata objects (7.3), unchanged and in Source's order: `[{"id": "doc-1", "filename": "doc-1.txt", "contentType": "text/plain", "size": 46, "deleted": false, "status": "Released", "statusMessage": null, "archiveUri": null, "archiveSha256": null}, …]` |
 | | | | 401 | token problem | `{"detail": "…"}` |
 | | | | 502 | one attempt, no retries; any transport error, timeout, non-2xx answer, or a body that isn't a JSON list of objects each with a string `id` | `{"detail": "Source API unavailable: <reason>"}` |
 | `GET /jobs` | yes | — | 200 | always | `[Job, …]`, newest first |
@@ -424,7 +424,7 @@ Returned by the job endpoints.
 
 ```json
 {
-  "id": "doc-1", "filename": "doc-1.txt", "contentType": "text/plain", "size": 48,
+  "id": "doc-1", "filename": "doc-1.txt", "contentType": "text/plain", "size": 46,
   "deleted": false, "status": "Released", "statusMessage": null,
   "archiveUri": null, "archiveSha256": null
 }

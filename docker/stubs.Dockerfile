@@ -3,7 +3,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 WORKDIR /srv
 COPY stubs/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY stubs/source_api.py stubs/vendor_api.py ./
+COPY stubs/source_api.py stubs/vendor_api.py stubs/stub_storage.py ./
 RUN useradd --create-home stubuser && mkdir -p /data && chown stubuser /data
 USER stubuser
 # docker-compose.yml chooses which stub this container runs.
