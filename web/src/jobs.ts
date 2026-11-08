@@ -1,5 +1,5 @@
 import { reactive } from 'vue'
-import { fetchJobs, publish, type Job } from './api'
+import { fetchJobs, publish, retryJob, type Job } from './api'
 import { errorMessage } from './http'
 
 const POLL_MS = 2000
@@ -53,4 +53,13 @@ export async function publishAll(documentIds: string[]): Promise<string[]> {
   return results.flatMap((result, i) =>
     result.status === 'rejected' ? [`${documentIds[i]}: ${errorMessage(result.reason)}`] : [],
   )
+}
+
+/** Runs a failed job again; refreshes the list at once, also when the retry is refused. */
+export async function retryFailedJob(jobId: string): Promise<void> {
+  try {
+    await retryJob(jobId)
+  } finally {
+    await refreshJobs()
+  }
 }

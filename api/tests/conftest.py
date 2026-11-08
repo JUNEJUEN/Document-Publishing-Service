@@ -12,6 +12,7 @@ import vendor_api
 from app.auth import issue_token
 from app.config import Settings
 from app.main import create_app
+from app.runner import Runner
 
 
 @pytest.fixture
@@ -76,6 +77,11 @@ class ApiFactory:
         await enter(app.router.lifespan_context(app))
         self._apps.append(app)
         return await enter(httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://api"))
+
+    @property
+    def runner(self) -> Runner:
+        """The runner of the API built last."""
+        return self._apps[-1].state.runner
 
     async def shutdown(self) -> None:
         """Stops every job task, as the app's shutdown does."""

@@ -6,8 +6,8 @@ from pydantic import ValidationError
 
 from ..auth import require_token
 from ..dependencies import get_runner, get_store
-from ..models.jobs import JobOut, PublishRequest
-from ..runner import JobRecordUnreadable, Runner
+from ..models.jobs import Job, JobOut, PublishRequest
+from ..runner import JobRecordUnreadable, NotRetryable, Runner
 from ..store import JobStore
 
 router = APIRouter(dependencies=[Depends(require_token)])
@@ -38,9 +38,22 @@ async def list_jobs(store: Annotated[JobStore, Depends(get_store)]) -> list[JobO
     return store.newest_first()
 
 
-@router.get("/jobs/{job_id}")
-async def get_job(job_id: str, store: Annotated[JobStore, Depends(get_store)]) -> JobOut:
+def job_or_404(job_id: str, store: Annotated[JobStore, Depends(get_store)]) -> Job:
     job = store.get(job_id)
     if job is None:
         raise HTTPException(404, "job not found")
+    return job
+
+
+@router.get("/jobs/{job_id}")
+async def get_job(job: Annotated[Job, Depends(job_or_404)]) -> JobOut:
+    return job
+
+
+@router.post("/jobs/{job_id}/retry", status_code=202)
+async def retry_job(job: Annotated[Job, Depends(job_or_404)], runner: Annotated[Runner, Depends(get_runner)]) -> JobOut:
+    try:
+        runner.retry(job)
+    except NotRetryable:
+        raise HTTPException(409, "only failed jobs can be retried") from None
     return job

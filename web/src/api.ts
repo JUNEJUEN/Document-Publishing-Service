@@ -85,3 +85,7 @@ export async function publish(documentId: string): Promise<void> {
     throw e
   }
 }
+
+export async function retryJob(jobId: string): Promise<void> {
+  await callApi(`/jobs/${encodeURIComponent(jobId)}/retry`, { method: 'POST' })
+}

@@ -5,6 +5,8 @@ from pathlib import Path
 import httpx
 import pytest
 
+import vendor_api
+from app.archive import Archive
 from app.models.jobs import Job
 from app.store import JobStore
 
@@ -193,3 +195,50 @@ async def test_step_6_only_run_keeps_its_state_while_it_runs(leftover, make_api,
     async with asyncio.timeout(2):
         await reached.wait()
     assert (await read_job(api, job.id))["state"] == "queued"  # spec 3, rule 3: not switched to running
+
+
+@pytest.fixture
+def delivered_elsewhere(settings, source_app):
+    """An archive copy whose original is already deleted in Source, as left after step 4."""
+    content = source_app.state.documents["doc-1"].content
+    archive_path, sha256 = Archive(settings.data_dir / "archive").store("doc-1", "doc-1.txt", content)
+    source_app.state.documents["doc-1"].content = None
+    return {
+        "filename": "doc-1.txt", "content_type": "text/plain", "archive_path": archive_path, "sha256": sha256,
+        "archive_linked": True, "source_deleted": True,
+    }
+
+
+@pytest.fixture
+def retry_on(make_api, auth_headers, read_job):
+    async def retry(api: httpx.AsyncClient, job_id: str) -> dict:
+        assert (await api.post(f"/jobs/{job_id}/retry", headers=auth_headers)).status_code == 202
+        await make_api.settle()
+        return await read_job(api, job_id)
+
+    return retry
+
+
+async def test_job_interrupted_after_step_4_delivers_the_archive_copy_on_retry(
+    leftover, restart, read_job, retry_on, delivered_elsewhere, vendor_app
+):
+    job = leftover(state="running", **delivered_elsewhere)
+    api = await restart()
+    assert (await read_job(api, job.id))["state"] == "failed"  # Error: interrupted
+    finished = await retry_on(api, job.id)
+    assert finished["state"] == "done"
+    assert vendor_app.state.deliveries[job.id].sha256 == delivered_elsewhere["sha256"]
+
+
+async def test_job_interrupted_during_step_5_is_delivered_once_on_retry(
+    leftover, restart, retry_on, delivered_elsewhere, vendor_app
+):
+    job = leftover(state="running", vendor_attempts=1, **delivered_elsewhere)
+    # The vendor stored the file, but the answer was lost when the service stopped.
+    vendor_app.state.deliveries[job.id] = vendor_api.Delivery(
+        receipt_id="first", idempotency_key=job.id, filename="doc-1.txt", sha256=delivered_elsewhere["sha256"],
+        size=1,  # never compared
+    )
+    finished = await retry_on(await restart(), job.id)
+    assert (finished["state"], finished["vendorReceipt"]) == ("done", "first")
+    assert list(vendor_app.state.deliveries) == [job.id]

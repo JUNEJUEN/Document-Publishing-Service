@@ -4,6 +4,7 @@ import json
 import httpx
 import pytest
 
+import source_api
 from app.archive import Archive
 from app.clients import SourceClient
 from app.runner import Runner
@@ -90,7 +91,9 @@ async def test_original_is_kept_when_the_archive_copy_is_damaged_before_the_dele
     assert source_app.state.documents["doc-1"].content is not None
 
 
-async def test_unknown_document_fails_and_no_status_can_be_written(published, events):
+async def test_unknown_document_fails_and_retry_works_once_it_exists(
+    published, events, api, auth_headers, settle, source_app
+):
     finished = await published("doc-99")
     assert (finished["state"], finished["statusReported"]) == ("failed", False)
     assert finished["error"] == (
@@ -98,6 +101,12 @@ async def test_unknown_document_fails_and_no_status_can_be_written(published, ev
         "Reading the document from Source failed: HTTP 404"
     )
     assert events == [("source", "get", "doc-99"), ("source", "status", "doc-99")]
+    source_app.state.documents["doc-99"] = source_api.StoredDocument(
+        id="doc-99", filename="doc-99.txt", content_type="text/plain", content=b"arrived late"
+    )
+    assert (await api.post(f"/jobs/{finished['id']}/retry", headers=auth_headers)).status_code == 202
+    await settle()
+    assert (await api.get(f"/jobs/{finished['id']}", headers=auth_headers)).json()["state"] == "done"
 
 
 @pytest.mark.parametrize(

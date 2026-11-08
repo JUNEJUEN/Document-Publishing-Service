@@ -156,7 +156,11 @@ async def test_rejected_login_is_readable_by_the_web_app(api):
 
 
 @pytest.mark.parametrize(
-    "method, path", [("GET", "/documents"), ("POST", "/publish"), ("GET", "/jobs"), ("GET", "/jobs/some-id")]
+    "method, path",
+    [
+        ("GET", "/documents"), ("POST", "/publish"), ("GET", "/jobs"), ("GET", "/jobs/some-id"),
+        ("POST", "/jobs/some-id/retry"),
+    ],
 )
 async def test_protected_endpoints_need_a_token(api, events, method, path):
     response = await api.request(method, path)

@@ -64,7 +64,7 @@ One `docker compose up --build` starts all four.
 |---|---|---|---|
 | `api` | 8000 | `publishing-data:/data` | The publishing service |
 | `source-stub` | 8001 | `source-data:/data` | Fake CRM |
-| `vendor-stub` | 8002 | `vendor-data:/data` | Fake partner; fails about 30% of the time |
+| `vendor-stub` | 8002 | `vendor-data:/data` | Fake partner. The stub fails about 30% of the time by default, as the brief says; Compose sets 60% (`VENDOR_FAILURE_RATE`), so failed jobs show up in a demo |
 | `web` | 8080 | — | Vue app served by nginx; the browser calls `api` over HTTP |
 
 `api` keeps:
@@ -451,7 +451,7 @@ Returned by the job endpoints.
 | `GET /health` | — | 200 | always | `{"ok": true}` |
 
 **Behaviour:**
-- **Seeding:** on first start it creates `doc-1` … `doc-20` (`SEED_DOCUMENTS`), each a small text file.
+- **Seeding:** on first start it creates `doc-1` … `doc-N`, each a small text file. N is `SEED_DOCUMENTS`: 100 under Compose (overridable in `.env`), 20 as the stub's own default.
 - **Saving:** when `DATA_FILE` is set (Compose: `/data/source.json`), every change is saved there (content base64-encoded) and loaded again on start. Seeding happens only when the file doesn't exist.
 - **Tests:** they leave `DATA_FILE` unset, so everything stays in memory.
 - **Call log:** every call is recorded as `(service, action, id)` in a shared event log that tests can pass in, so the order of calls across both stubs can be checked.
@@ -469,7 +469,7 @@ Returned by the job endpoints.
 
 **Order inside `POST /files`:**
 1. Check that the key is present.
-2. Pick the outcome. Each of "fail" and "fail after store" has a chance of `FAILURE_RATE / 2` (15% each by default).
+2. Pick the outcome. Each of "fail" and "fail after store" has a chance of `FAILURE_RATE / 2` (15% each at the stub's default of 0.3; 30% each at the Compose default of 0.6).
 3. Only after that, look up the key.
 
 So a known key can still get a 503. For a known key, "fail after store" and "ok" keep the first record unchanged; nothing is added to `GET /files`.
@@ -578,7 +578,7 @@ The stubs have no tests of their own. The API tests run against the real stub ap
 
 The API refuses to start when a required setting is missing. Tests pass their own values.
 
-Compose supplies the required settings with demo defaults, and the API's own defaults cover the rest, so no `.env` file is needed. `.env.example`, which is committed to git, lists the values worth overriding: `CLIENT_ID`, `CLIENT_SECRET`, `TOKEN_SECRET`, `TOKEN_TTL_SECONDS` (a short value helps test token renewal), and `VENDOR_FAILURE_RATE` (passed to the vendor stub as `FAILURE_RATE`). Copying it to `.env`, which git and Docker ignore, changes them for `docker compose`.
+Compose supplies the required settings with demo defaults, and the API's own defaults cover the rest, so no `.env` file is needed. `.env.example`, which is committed to git, lists the values worth overriding: `CLIENT_ID`, `CLIENT_SECRET`, `TOKEN_SECRET`, `TOKEN_TTL_SECONDS` (a short value helps test token renewal), `VENDOR_FAILURE_RATE` (passed to the vendor stub as `FAILURE_RATE`), and `SEED_DOCUMENTS` (how many documents the Source stub creates on first start; default 100). Copying it to `.env`, which git and Docker ignore, changes them for `docker compose`.
 
 ## 11. Docker and CI
 
@@ -633,7 +633,7 @@ A feature only uses things built in earlier features. Its tests only cover what 
 | 7 | Vendor delivery (step 5); quick retries for both Source and Vendor calls | 4.2, 5.1 | In `test_vendor_failure.py`, "Error in Source" is written in feature 8, and "`nextRetryAt` shows the next cron run" in feature 11. Until feature 8, a run that passes step 5 ends `done`. In the tests, `make_api` takes `source=` and `vendor=` transports, and the event log fixture is `events`. |
 | 8 | Status write-back (step 6); the job completes; final-state rules and outer guard | 4.3–4.5, 5.2 | A failed status write leaves the job `running`; writing it again comes with the cron, and its test is written in feature 11. The "404, then Retry works" test is written in feature 10. A run that starts from a saved outcome (step 6 only, 4.2) comes with features 9 and 11, which start such runs. |
 | 9 | Restart handling: interrupted jobs, corrupt and temp job files, shutdown | 4.1, 4.6 | The "delivered on retry" tests for interrupted jobs are written in feature 10. `ApiFactory.shutdown()` stops job tasks in tests. A restart is simulated by building a second API on the same data folder. |
-| 10 | Retry button and `retry()` | 3 (rule 2), 4.2 (checking an existing archive copy), 5.3, 5.4, 7.2, 8 | Also adds the deferred tests from features 4, 8 and 9. "Manual retry and a cron run together" is written in feature 11. |
+| 10 | Retry button and `retry()` | 3 (rule 2), 4.2 (checking an existing archive copy), 5.3, 5.4, 7.2, 8 | Also adds the deferred tests from features 4, 8 and 9. "Manual retry and a cron run together" is written in feature 11. `retry(job)` here is the manual path. The `automatic` flag and `auto_retries` come with the cron in feature 11. |
 | 11 | Retry cron, `nextRetryAt`, `autoRetries`, `autoRetryMax` | 5.3, 7.1, 8 ("Next automatic retry"), 10 (`AUTO_RETRY_*`) | Writes the cron tests in `test_retry.py`, and adds the deferred tests from features 7, 8 and 10. |
 | 12 | CI | 11 (CI) | — |
 

@@ -29,6 +29,10 @@ class JobRecordUnreadable(Exception):
     """The document's job file could not be read at startup; publishing it waits for manual action."""
 
 
+class NotRetryable(Exception):
+    """Only a failed job whose last run has finished can be retried."""
+
+
 def _reason(exc: Exception) -> str:
     return (str(exc) or type(exc).__name__)[:MAX_MESSAGE]
 
@@ -86,6 +90,20 @@ class Runner:
                 job.outcome, job.outcome_message = ("Published", None) if job.vendor_receipt else ("Error", INTERRUPTED)
                 self._store.save(job)
             self._submit(job)
+
+    def retry(self, job: Job) -> None:
+        """Runs a failed job again from its checkpoints (spec 5.3); no await, so it can't interleave."""
+        if job.state != "failed" or self._has_task(job):
+            raise NotRetryable(job.id)
+        job.outcome = job.outcome_message = job.error = None
+        job.status_reported = False
+        job.state = "queued"
+        self._store.save(job)
+        self._submit(job)
+
+    def _has_task(self, job: Job) -> bool:
+        task = self._tasks.get(job.id)
+        return task is not None and not task.done()
 
     def _submit(self, job: Job) -> None:
         self._tasks[job.id] = asyncio.create_task(self._run(job))
@@ -160,39 +178,59 @@ class Runner:
 
     async def _steps(self, job: Job) -> None:
         """Steps to run a job"""
+        # A retry skips each step whose checkpoint is saved (spec 4.2).
         document_id = job.document_id
+        if job.archive_path is not None and not job.source_deleted:
+            await self._check_archive_copy(job)
 
         # Step 1: get document
-        with _step("Reading the document from Source"):
-            document = await self._source_retry.run(lambda: self._source.get_document(document_id))
-            content = await self._source_retry.run(lambda: self._source.get_content(document_id))
+        if job.archive_path is None:  # steps 1 and 2 share this checkpoint
+            with _step("Reading the document from Source"):
+                document = await self._source_retry.run(lambda: self._source.get_document(document_id))
+                content = await self._source_retry.run(lambda: self._source.get_content(document_id))
 
-        # Step 2: archive the document and update the job status
-        with _step("Archiving"):
-            job.archive_path, job.sha256 = await asyncio.to_thread(
-                self._archive.store, document_id, document.filename, content
-            )
-        job.filename, job.content_type = document.filename, document.content_type
-        self._store.save(job)
+            # Step 2: archive the document and update the job status
+            with _step("Archiving"):
+                job.archive_path, job.sha256 = await asyncio.to_thread(
+                    self._archive.store, document_id, document.filename, content
+                )
+            job.filename, job.content_type = document.filename, document.content_type
+            self._store.save(job)
 
         # Step 3: Update the archive link in source api stub
-        uri = f"archive://{job.archive_path}"
-        with _step("Linking the archive copy in Source"):
-            await self._source_retry.run(lambda: self._source.set_archive_link(document_id, uri, job.sha256))
-        job.archive_linked = True
-        self._store.save(job)
+        if not job.archive_linked:
+            uri = f"archive://{job.archive_path}"
+            with _step("Linking the archive copy in Source"):
+                await self._source_retry.run(lambda: self._source.set_archive_link(document_id, uri, job.sha256))
+            job.archive_linked = True
+            self._store.save(job)
 
         # Step 4: Before deletion, verify the archive copy using hash, then delete the document in source api stub
-        with _step("Verifying the archive copy"):
-            if not await asyncio.to_thread(self._archive.matches, job.archive_path, job.sha256):
-                raise ArchiveError("archive copy is damaged or missing")
-        with _step("Deleting the original in Source"):
-            await self._source_retry.run(lambda: self._source.delete_document(document_id))
-        job.source_deleted = True
-        self._store.save(job)
+        if not job.source_deleted:
+            with _step("Verifying the archive copy"):
+                if not await asyncio.to_thread(self._archive.matches, job.archive_path, job.sha256):
+                    raise ArchiveError("archive copy is damaged or missing")
+            with _step("Deleting the original in Source"):
+                await self._source_retry.run(lambda: self._source.delete_document(document_id))
+            job.source_deleted = True
+            self._store.save(job)
 
         # Step 5: Deliver file to vendor stub
-        await self._deliver(job)
+        if job.vendor_receipt is None:
+            await self._deliver(job)
+
+    async def _check_archive_copy(self, job: Job) -> None:
+        """Before the delete: a damaged archive copy is made again, if Source still has the original."""
+        with _step("Verifying the archive copy"):
+            if await asyncio.to_thread(self._archive.matches, job.archive_path, job.sha256):
+                return
+        with _step("Reading the document from Source"):
+            document = await self._source_retry.run(lambda: self._source.get_document(job.document_id))
+        if document.deleted:  # a delete whose answer was lost (spec 5.4): keep the evidence
+            raise ArchiveError(DAMAGED_AFTER_DELETE)
+        job.archive_path = job.sha256 = job.filename = job.content_type = None
+        job.archive_linked = False
+        self._store.save(job)
 
     async def _deliver(self, job: Job) -> None:
         """Step 5: sends the archive copy, now the only copy, to the Vendor."""
