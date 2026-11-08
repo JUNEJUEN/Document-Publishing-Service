@@ -58,6 +58,8 @@ docker compose run --rm -T lint
 5. On a `401 Unauthorized` response, the frontend automatically requests a new token in the background and retries the call.
 
 ### Running a Job Flow 
+Each job runs in the background as its own asyncio task, so the API replies right away instead of waiting for the job to finish. An `asyncio.Semaphore` lets at most 10 jobs run at once (set by `MAX_CONCURRENT_JOBS`); extra jobs wait as "Waiting" until a slot frees up, so a burst of requests can't overload the server or flood the Source CRM and Vendor APIs.
+
 1. **Read**: Download document metadata and content from Source CRM.
 2. **Archive**: Save file to /data/archive/{docId}/{sha256}/{filename} and verify its **SHA-256 hash** to confirm the file was saved without disk corruption.
 3. **Link**: Save the archive link back to Source CRM.
