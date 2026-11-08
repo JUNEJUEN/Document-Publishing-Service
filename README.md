@@ -21,6 +21,7 @@
   - [Cloud storage and managed database](#cloud-storage-and-managed-database)
   - [Dedicated Cron/Scheduler service](#dedicated-cronscheduler-service)
   - [CD pipeline, releases and versioning](#cd-pipeline-releases-and-versioning)
+- [IV. Tests required by the brief](#iv-tests-required-by-the-brief)
 
 ## AI Usage
 AI Tool : Claude
@@ -148,3 +149,17 @@ In production, we should add a managed scheduler (like AWS EventBridge or Kubern
 Currently, the service is only run locally with Docker Compose, and there is no deployment pipeline or version number.
 
 In production, we should add a CD pipeline (like GitHub Actions) that runs when a release is tagged with a version number (e.g. `v1.2.0`, using semantic versioning). It builds the Docker images, tags them with that version, pushes them to a registry (like AWS ECR), and deploys them first to staging and then to production. Because every image has a version, we always know what is running and can roll back by deploying the previous version.
+
+## IV. Tests required by the brief
+| Rule | File | Test cases |
+|---|---|---|
+| Retry rule: the same `requestId` twice gives the same job, delivered once | [api/tests/test_idempotency.py](api/tests/test_idempotency.py) | `test_same_request_twice_gives_the_same_job`<br>`test_simultaneous_duplicates_create_one_job`<br>`test_duplicate_after_the_job_finished_gives_the_same_job`<br>`test_new_request_id_for_the_same_document_gives_the_same_job`<br>`test_duplicate_after_a_restart_gives_the_same_job` |
+| Vendor failure: delivered once after failures, and the archive copy is kept when every attempt fails | [api/tests/test_vendor_failure.py](api/tests/test_vendor_failure.py) | `test_delivers_once_after_failures`<br>`test_lost_answers_do_not_deliver_twice`<br>`test_gives_up_after_three_failures_and_keeps_the_archive_copy`<br>`test_vendor_attempts_follow_their_setting` |
+| Rejected unauthenticated call: 401 (never 500), and no work is done | [api/tests/test_auth.py](api/tests/test_auth.py) | `test_anonymous_publish_is_rejected_and_does_nothing`<br>`test_protected_endpoints_need_a_token`<br>`test_broken_publish_body_without_a_token_gets_401` |
+
+Run one file or one test case:
+```
+docker compose run --rm -T tests tests/test_idempotency.py
+docker compose run --rm -T tests tests/test_vendor_failure.py
+docker compose run --rm -T tests tests/test_auth.py::test_anonymous_publish_is_rejected_and_does_nothing
+```
