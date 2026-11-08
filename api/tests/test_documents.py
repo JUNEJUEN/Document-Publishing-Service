@@ -12,6 +12,7 @@ FAILING_ANSWERS = {
     "item-not-object": lambda: httpx.Response(200, json=["doc-1"]),
     "item-without-id": lambda: httpx.Response(200, json=[{"filename": "a.txt"}]),
     "id-not-string": lambda: httpx.Response(200, json=[{"id": 1}]),
+    "missing-field": lambda: httpx.Response(200, json=[{"id": "doc-1"}]),
 }
 KINDS = ["unreachable", "timeout", *FAILING_ANSWERS]
 
@@ -60,6 +61,7 @@ async def test_source_failure_gives_502_after_one_attempt(make_api, auth_headers
         ("503", "HTTP 503"),
         ("not-json", "answer is not JSON"),
         ("object", "answer is not a document list"),
+        ("missing-field", "answer is not a document list"),
     ],
 )
 async def test_502_names_the_reason_without_internals(make_api, auth_headers, kind, reason):
