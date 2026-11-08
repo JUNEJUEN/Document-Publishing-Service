@@ -89,6 +89,7 @@ class Runner:
                 # A receipt means it was delivered before the kill.
                 job.outcome, job.outcome_message = ("Published", None) if job.vendor_receipt else ("Error", INTERRUPTED)
                 self._store.save(job)
+            # We submit the job with outcome -> report job status back to the source CRM, not run it again
             self._submit(job)
 
     def retry(self, job: Job) -> None:

@@ -12,16 +12,11 @@
   color: var(--text);
 }
 body { margin: 0; background: var(--bg); }
-main { max-width: 1280px; margin: 0 auto; padding: 24px 16px; }
-/* Publishing on the left, jobs on the right; stacked on narrow screens. */
-.columns { display: grid; gap: 16px; align-items: start; }
-@media (min-width: 1024px) { .columns { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
-.columns .card { margin-bottom: 0; }
+main { max-width: 1080px; margin: 0 auto; padding: 24px 16px; }
 .login { max-width: 400px; }
 header { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
 h1 { font-size: 1.5rem; }
 h2 { font-size: 1.1rem; margin: 0 0 12px; }
-.card h3 { font-size: 0.95rem; margin: 16px 0 8px; padding-top: 16px; border-top: 1px solid var(--border); }
 .who { display: flex; align-items: center; gap: 12px; }
 .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
 label { display: flex; flex-direction: column; gap: 4px; font-size: 0.9rem; margin-bottom: 12px; }
@@ -32,11 +27,9 @@ button.secondary { background: transparent; color: var(--accent); border: 1px so
 .error { color: var(--bad); }
 .muted { color: var(--muted); }
 .notice { background: var(--wait-bg); padding: 8px 12px; border-radius: 6px; }
-.card-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 8px; }
-.card-head h2 { margin: 0; }
-.actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .publish-form { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; }
 .publish-form label { margin-bottom: 0; }
+.field { display: flex; flex-direction: column; gap: 4px; font-size: 0.9rem; }
 table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
 th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--border); }
 td { overflow-wrap: anywhere; }

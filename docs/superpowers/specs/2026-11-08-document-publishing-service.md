@@ -486,9 +486,8 @@ Vue 3 + Vite + TypeScript, built to static files and served by nginx. The API ad
 |---|---|
 | Login | As in section 6. |
 | Header | Title and a "Log out" button. |
-| Start a publication | As the brief asks: a document-id field and a Publish button. It works even when the documents table can't load, and it lets any id be tried, including unknown ones. The field and the row buttons share the same publish behaviour (below). |
-| Documents | A table from `GET /documents`, with columns id, filename, size and Source status. It loads after login and when the user clicks "Refresh". It also reloads whenever a job in the job list changes to `done` or `failed`. Otherwise it is not polled, so it is not live. Each row has a **Publish** button. The button is disabled when the document is `deleted`, or while that row's request is in flight. Each click sends a fresh `requestId` (`crypto.randomUUID()`, with a fallback). API errors are shown above the table, including "Source API unavailable" from a 502. |
-| Job list | Polls `GET /jobs` every 2 s, and right after a publish or a retry. Polling stops on logout. Newest first. Columns: started, document, state, details. |
+| Publish | As the brief asks: a document-id field and a Publish button. The field also opens a dropdown of the documents that can still be published (from `GET /documents`: not deleted, no job yet), but any id can be typed, so it works even when the list can't load. A "Publish all (N)" button publishes every document in that dropdown, after a confirmation, because publishing deletes the originals in Source. The list loads after login and reloads each time the field gets focus, so new documents appear without a Refresh button. "Publish all" also stays disabled while the job list shows an error, because the page can't tell then which documents already have a job. Each publish sends a fresh `requestId` (`crypto.randomUUID()`, with a fallback). Errors show below the field, including "Source API unavailable" from a 502. |
+| Job list | The only list on the page. Polls `GET /jobs` every 2 s, and right after a publish or a retry. Polling stops on logout. Newest first. Columns: started, document, state, details, and a Retry button on failed jobs. |
 
 **How each state is shown:**
 
@@ -499,8 +498,8 @@ Vue 3 + Vite + TypeScript, built to static files and served by nginx. The API ad
 | Failed | Red, with the reason. A **Retry** button, plus "Next automatic retry at {time} (retry {autoRetries + 1} of {autoRetryMax})" when `nextRetryAt` is set. |
 
 **Waiting states:**
-- "Loading documents…" and "Loading jobs…" before the first answer.
-- "No jobs yet" when the job list is empty, and "No documents in Source" when the documents table is empty.
+- "Loading jobs…" before the first answer.
+- "No jobs yet" when the job list is empty. "Publish all (0)" is disabled when every document already has a job.
 - Button labels change while a request is in flight.
 - A failed refresh shows an error and keeps the last list.
 

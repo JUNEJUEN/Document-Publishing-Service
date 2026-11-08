@@ -40,7 +40,7 @@ export function stopPolling(): void {
   clearTimeout(timer)
 }
 
-/** Shared by the document-id field and the row buttons. */
+/** Publishes one document, then refreshes the job list at once. */
 export async function publishDocument(documentId: string): Promise<void> {
   await publish(documentId)
   await refreshJobs()
