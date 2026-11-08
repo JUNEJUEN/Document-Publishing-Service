@@ -20,7 +20,7 @@
 
 **Tech stack:** Python 3.12, FastAPI 0.115.6, python-multipart 0.0.20 (needed by FastAPI for file uploads).
 
-**Spec:** `docs/superpowers/specs/2026-11-08-document-publishing-service.md`, section 7.4, section 7.3 "Call log", D11 and section 12, feature 3.
+**Spec:** `docs/specs/2026-11-08-document-publishing-service.md`, section 7.4, section 7.3 "Call log", D11 and section 12, feature 3.
 
 **Testing:** owner-approved exception to the CLAUDE.md test-first flow (spec sections 9 and 12): the stub gets **no tests of its own**. It is checked by hand with `curl` under Compose (Task 4), and later exercised by the API tests from feature 7 on. The existing API tests must still pass.
 

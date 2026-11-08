@@ -37,7 +37,7 @@
 
 **Tech stack:** FastAPI 0.115.6, httpx 0.28.1, Pydantic 2.14.
 
-**Spec:** `docs/superpowers/specs/2026-11-08-document-publishing-service.md`:
+**Spec:** `docs/specs/2026-11-08-document-publishing-service.md`:
 - 1 (R4);
 - 4.1 (`outcome`, `outcome_message`, `status_reported`), 4.2 (step 6), 4.3, 4.4, 4.5;
 - 5.2;
@@ -60,7 +60,7 @@
 | `api/app/runner.py` | Outcome, step 6, final states, outer guard |
 | `api/tests/test_pipeline.py` | Step 6 in the call order; status write and guard tests; `flaky()` takes a path and a status |
 | `api/tests/test_jobs.py`, `test_vendor_failure.py` | `statusReported`; `Error` written to Source |
-| `docs/superpowers/specs/2026-11-08-document-publishing-service.md` | Sections 3, 12 |
+| `docs/specs/2026-11-08-document-publishing-service.md` | Sections 3, 12 |
 
 Commands are written for Git Bash, run from the repository root. Test counts: 141 before this plan, 146 after.
 
@@ -783,7 +783,7 @@ Expected:
 
 - [ ] **Step 2: Browser check (owner).** At `http://localhost:8080`, publish a document. When its job is Done, the documents table shows its Source status as "Published", and as deleted.
 
-- [ ] **Step 3: Spec sync.** In `docs/superpowers/specs/2026-11-08-document-publishing-service.md`:
+- [ ] **Step 3: Spec sync.** In `docs/specs/2026-11-08-document-publishing-service.md`:
   - **3, units table:** `clients` "Uses": `—` becomes `models`.
   - **12, feature 8 row, last column:** append "A run that starts from a saved outcome (step 6 only, 4.2) comes with features 9 and 11, which start such runs."
 

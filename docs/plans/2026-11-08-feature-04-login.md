@@ -20,7 +20,7 @@
 
 **Tech stack:** FastAPI 0.115.6, PyJWT 2.10.1, python-multipart 0.0.20, Vue 3 + TypeScript.
 
-**Spec:** `docs/superpowers/specs/2026-11-08-document-publishing-service.md`, sections 6 (login), 7.2 (`POST /oauth/token`, CORS), 8 (login screen part), 10 (`CLIENT_ID`, `CLIENT_SECRET`, `TOKEN_SECRET`, `TOKEN_TTL_SECONDS`, `CORS_ORIGINS`) and section 12, feature 4.
+**Spec:** `docs/specs/2026-11-08-document-publishing-service.md`, sections 6 (login), 7.2 (`POST /oauth/token`, CORS), 8 (login screen part), 10 (`CLIENT_ID`, `CLIENT_SECRET`, `TOKEN_SECRET`, `TOKEN_TTL_SECONDS`, `CORS_ORIGINS`) and section 12, feature 4.
 
 **Deferred tests (spec section 12):**
 - `test_auth.py` here covers the token endpoint and the token check.

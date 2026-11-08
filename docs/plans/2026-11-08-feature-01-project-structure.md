@@ -12,7 +12,7 @@
 
 **Tech stack:** Python 3.12, FastAPI 0.115.6, uvicorn 0.34.0, pytest 8.3.4, pytest-asyncio 0.25.0, httpx 0.28.1, Vue 3.5, Vite 6, TypeScript 5.7, nginx 1.27, Docker Compose.
 
-**Spec:** `docs/superpowers/specs/2026-11-08-document-publishing-service.md`, feature 1 in section 12. It covers sections 3, 9 (setup and layout), 10 (the settings used so far) and 11 (images, Compose).
+**Spec:** `docs/specs/2026-11-08-document-publishing-service.md`, feature 1 in section 12. It covers sections 3, 9 (setup and layout), 10 (the settings used so far) and 11 (images, Compose).
 
 **Out of scope for this feature:**
 - the settings used by later features (auth, URLs, retries), which each feature adds to `config`;

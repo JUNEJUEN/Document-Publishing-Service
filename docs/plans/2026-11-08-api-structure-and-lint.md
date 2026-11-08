@@ -16,7 +16,7 @@
 
 **Tech stack:** FastAPI 0.115.6, Pydantic v2, ruff 0.8.4.
 
-**Spec:** `docs/superpowers/specs/2026-11-08-document-publishing-service.md`, section 3 (units: `routers/`, `models/`, `dependencies`, `main`), section 9 (lint command) and section 11 (`lint` service, `ruff.toml`, CI).
+**Spec:** `docs/specs/2026-11-08-document-publishing-service.md`, section 3 (units: `routers/`, `models/`, `dependencies`, `main`), section 9 (lint command) and section 11 (`lint` service, `ruff.toml`, CI).
 
 **Behaviour change:** one. Source answers whose items miss a field or have a wrong type now give 502, where before only a missing or non-string `id` did. The model validates in strict mode, so `"size": "46"` is rejected, not coerced, and fields the model doesn't define are dropped. Task 2 adds tests for it. Everything else is a pure refactor, so the existing tests must keep passing unchanged.
 

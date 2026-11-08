@@ -36,7 +36,7 @@
 
 **Tech stack:** FastAPI 0.115.6, Pydantic 2.14, httpx 0.28.1, Vue 3 + TypeScript.
 
-**Spec:** `docs/superpowers/specs/2026-11-08-document-publishing-service.md`:
+**Spec:** `docs/specs/2026-11-08-document-publishing-service.md`:
 - 3 (rules 1–2);
 - 4.2 ("where a run starts", "checking an existing archive copy");
 - 5.3 (manual retry), 5.4;
@@ -59,7 +59,7 @@
 | `api/tests/test_auth.py` | The retry endpoint needs a token |
 | `api/tests/test_pipeline.py` | The unknown-document test goes on to retry once Source has it |
 | `web/src/api.ts`, `web/src/jobs.ts`, `web/src/components/JobList.vue` | `retryJob`, `retryFailedJob`, the Retry button |
-| `docs/superpowers/specs/2026-11-08-document-publishing-service.md` | Section 12 |
+| `docs/specs/2026-11-08-document-publishing-service.md` | Section 12 |
 
 Commands are written for Git Bash, run from the repository root. Test counts: 166 before this plan, 177 after.
 
@@ -1011,7 +1011,7 @@ Expected:
   1. A failed job shows a Retry button.
   2. Clicking it turns the job Waiting/Running, then Done, and the documents table reloads.
 
-- [ ] **Step 3: Spec sync.** In `docs/superpowers/specs/2026-11-08-document-publishing-service.md`, section 12, feature 10 row, append to the last column: "`retry(job)` here is the manual path. The `automatic` flag and `auto_retries` come with the cron in feature 11."
+- [ ] **Step 3: Spec sync.** In `docs/specs/2026-11-08-document-publishing-service.md`, section 12, feature 10 row, append to the last column: "`retry(job)` here is the manual path. The `automatic` flag and `auto_retries` come with the cron in feature 11."
 
 Suggested commit: `docs: sync spec with feature 10`
 

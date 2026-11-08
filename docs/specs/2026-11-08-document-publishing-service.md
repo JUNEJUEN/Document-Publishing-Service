@@ -618,7 +618,7 @@ All Dockerfiles live in `docker/`. Every image is built with the repository root
 
 ## 12. Build order
 
-The system is built as working slices. Each feature gets its own plan in `docs/superpowers/plans/`, written just before it is built, and follows the project workflow in `CLAUDE.md`.
+The system is built as working slices. Each feature gets its own plan in `docs/plans/`, written just before it is built, and follows the project workflow in `CLAUDE.md`.
 
 A feature only uses things built in earlier features. Its tests only cover what exists at that point; the test cases that need a later feature are written in that later feature (the "Deferred tests" column).
 

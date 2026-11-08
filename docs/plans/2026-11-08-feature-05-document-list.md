@@ -21,7 +21,7 @@
 
 **Tech stack:** FastAPI 0.115.6, httpx 0.28.1 (now an API runtime package), Vue 3 + TypeScript.
 
-**Spec:** `docs/superpowers/specs/2026-11-08-document-publishing-service.md`:
+**Spec:** `docs/specs/2026-11-08-document-publishing-service.md`:
 - D14;
 - 7.2 (`GET /documents`);
 - 7.3 (the stub's list);

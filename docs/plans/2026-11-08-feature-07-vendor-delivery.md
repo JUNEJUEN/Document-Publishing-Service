@@ -43,7 +43,7 @@
 
 **Tech stack:** FastAPI 0.115.6, httpx 0.28.1 (multipart upload), Pydantic 2.14, Vue 3 + TypeScript.
 
-**Spec:** `docs/superpowers/specs/2026-11-08-document-publishing-service.md`:
+**Spec:** `docs/specs/2026-11-08-document-publishing-service.md`:
 - 1 (R1, R2);
 - 3 (units `clients`, `backoff`, `runner`);
 - 4.1 (`vendor_attempts`, `vendor_receipt`), 4.2 (step 5), 4.7;
@@ -77,7 +77,7 @@
 | `api/tests/test_auth.py`, `test_documents.py` | Renamed fixture; `make_api(source=…)` |
 | `docker-compose.yml` | `api`: `VENDOR_API_URL` |
 | `web/src/api.ts`, `web/src/components/JobList.vue` | `vendorAttempts`, `vendorReceipt` in the job details |
-| `docs/superpowers/specs/2026-11-08-document-publishing-service.md` | Sections 3, 7.1, 12 |
+| `docs/specs/2026-11-08-document-publishing-service.md` | Sections 3, 7.1, 12 |
 
 Commands are written for Git Bash, run from the repository root. Test counts: 117 before this plan, 141 after.
 
@@ -1445,7 +1445,7 @@ With a 30% failure rate, five failures in a row happen about 0.2% of the time. T
 
 - [ ] **Step 2: Browser check (owner).** Publish a document at `http://localhost:8080`. While the job runs, its details show "Vendor attempts so far: N". When it is done, they show "Vendor receipt …".
 
-- [ ] **Step 3: Spec sync.** In `docs/superpowers/specs/2026-11-08-document-publishing-service.md`:
+- [ ] **Step 3: Spec sync.** In `docs/specs/2026-11-08-document-publishing-service.md`:
   - **3, units table:**
     - `models/`: add "`vendor.py` (`Receipt`)";
     - `runner` "Uses": add `config`.

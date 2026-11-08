@@ -59,7 +59,7 @@ Both are started again for **step 6 only**. `done` and `failed` jobs are not tou
 
 **Tech stack:** FastAPI 0.115.6, Pydantic 2.14, pytest-asyncio.
 
-**Spec:** `docs/superpowers/specs/2026-11-08-document-publishing-service.md`:
+**Spec:** `docs/specs/2026-11-08-document-publishing-service.md`:
 - 1 (R4, second exception);
 - 3 (rule 3, step-6-only runs);
 - 4.1 (`.tmp` and `.corrupt-*` files), 4.2 ("where a run starts", the saved-outcome case), 4.6;
@@ -81,7 +81,7 @@ Both are started again for **step 6 only**. `done` and `failed` jobs are not tou
 | `api/tests/test_startup.py` | New |
 | `api/tests/test_pipeline.py` | Shutdown test |
 | `api/tests/test_idempotency.py` | Duplicate after a restart |
-| `docs/superpowers/specs/2026-11-08-document-publishing-service.md` | Section 12 |
+| `docs/specs/2026-11-08-document-publishing-service.md` | Section 12 |
 
 Commands are written for Git Bash, run from the repository root. Test counts: 147 before this plan, 161 after.
 
@@ -707,7 +707,7 @@ MSYS_NO_PATHCONV=1 docker compose exec -T api sh -c 'rm /data/jobs/restart-check
 docker compose restart api && until curl -sf localhost:8000/health >/dev/null; do sleep 1; done
 ```
 
-- [ ] **Step 2: Spec sync.** In `docs/superpowers/specs/2026-11-08-document-publishing-service.md`, in the section 12 row for feature 9, append to the last column:
+- [ ] **Step 2: Spec sync.** In `docs/specs/2026-11-08-document-publishing-service.md`, in the section 12 row for feature 9, append to the last column:
 
 "`ApiFactory.shutdown()` stops job tasks in tests. A restart is simulated by building a second API on the same data folder."
 

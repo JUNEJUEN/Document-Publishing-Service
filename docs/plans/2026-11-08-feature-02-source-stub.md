@@ -13,7 +13,7 @@
 
 **Tech stack:** Python 3.12, FastAPI 0.115.6 (with Pydantic v2).
 
-**Spec:** `docs/superpowers/specs/2026-11-08-document-publishing-service.md`, section 7.3 (the endpoint table and "Behaviour"), D11 (stubs saved on volumes), and section 12, feature 2.
+**Spec:** `docs/specs/2026-11-08-document-publishing-service.md`, section 7.3 (the endpoint table and "Behaviour"), D11 (stubs saved on volumes), and section 12, feature 2.
 
 **Testing:** owner-approved exception to the CLAUDE.md test-first flow (spec sections 9 and 12): the stub gets **no tests of its own**. It is checked by hand with `curl` under Compose (Task 3), and later exercised by the API tests from feature 5 on. The existing API tests must still pass.
 

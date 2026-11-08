@@ -16,7 +16,7 @@
 
 **Not in scope:** the other final-review findings (the `async` dependencies, README and spec cleanup) are separate changes.
 
-**Spec:** `docs/superpowers/specs/2026-11-08-document-publishing-service.md`, sections 4.4, 4.6, 5.3, 7.1, 7.2 and 8, updated in Task 3.
+**Spec:** `docs/specs/2026-11-08-document-publishing-service.md`, sections 4.4, 4.6, 5.3, 7.1, 7.2 and 8, updated in Task 3.
 
 ---
 
@@ -29,7 +29,7 @@
 | `api/app/routers/jobs.py` | Every job endpoint answers a `JobView`; the 409 text |
 | `api/tests/test_jobs.py`, `api/tests/test_retry.py` | `canRetry` checks; the status-retry test; the status-still-writing test |
 | `web/src/api.ts`, `web/src/components/JobList.vue` | `canRetry` in `Job`; the button uses it |
-| `docs/superpowers/specs/2026-11-08-document-publishing-service.md` | Sections 4.4, 4.6, 5.3, 7.1, 7.2, 8 |
+| `docs/specs/2026-11-08-document-publishing-service.md` | Sections 4.4, 4.6, 5.3, 7.1, 7.2, 8 |
 
 Commands are written for Git Bash, run from the repository root. Test counts: 177 before, 179 after.
 
@@ -464,7 +464,7 @@ Then, in the browser:
 3. Run `docker compose start source-stub`.
 4. Click **Retry**. The retry runs the job again from its checkpoints. None were saved, since step 1 never succeeded, so it runs fully. It normally ends **Done**, with Source showing "Published". It can end **Failed** if the Vendor fails all 3 attempts, and then Retry shows again.
 
-- [ ] **Step 2: Spec sync.** In `docs/superpowers/specs/2026-11-08-document-publishing-service.md`:
+- [ ] **Step 2: Spec sync.** In `docs/specs/2026-11-08-document-publishing-service.md`:
   - **5.3 "Retrying failed jobs", item 1:** "Acts only on `failed` jobs that have no running task." becomes "Acts on a job with no running task that is either `failed`, or owes Source its status (outcome saved, `status_reported` false). The same rule gives the API's `canRetry`. A job owing a `Published` status then only writes it; one owing an `Error` runs again from its checkpoints, like a failed job."
   - **4.4, "Step 6 fails for any other reason":** after "The next cron run tries the status write again." add "Until then (the cron is skipped), the Retry button does: the job shows it through `canRetry`." In the outer guard's "Otherwise" item, after "the next cron run picks it up" add "(or the Retry button)".
   - **4.6, item 1:** after "If step 6 fails, the job waits for the next cron run (4.4)" add "or the Retry button".

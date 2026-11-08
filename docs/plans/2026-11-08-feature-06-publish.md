@@ -30,7 +30,7 @@
 
 **Tech stack:** FastAPI 0.115.6, Pydantic 2.14, httpx 0.28.1, Vue 3 + TypeScript.
 
-**Spec:** `docs/superpowers/specs/2026-11-08-document-publishing-service.md`:
+**Spec:** `docs/specs/2026-11-08-document-publishing-service.md`:
 - 1 (R2, R3, R5);
 - 2 (D3, D5, D6, D8, D13);
 - 3 (units, concurrency rules 1–3);
@@ -72,7 +72,7 @@
 | `web/src/components/PublishForm.vue`, `JobList.vue` | New |
 | `web/src/components/DocumentsTable.vue` | Row Publish buttons; reload when a job finishes |
 | `web/src/App.vue`, `web/src/style.css` | Layout; job state styles |
-| `docs/superpowers/specs/2026-11-08-document-publishing-service.md` | Sections 3, 4.3, 9, 12 |
+| `docs/specs/2026-11-08-document-publishing-service.md` | Sections 3, 4.3, 9, 12 |
 
 Commands are written for Git Bash, run from the repository root. Test counts: 61 before this plan, 116 after.
 
@@ -1573,7 +1573,7 @@ Expected:
   4. publishing `../x` shows the invalid-document-id message;
   5. after logging out, the browser's Network tab shows no more `/jobs` calls.
 
-- [ ] **Step 3: Spec sync.** In `docs/superpowers/specs/2026-11-08-document-publishing-service.md`:
+- [ ] **Step 3: Spec sync.** In `docs/specs/2026-11-08-document-publishing-service.md`:
   - **4.3, second bullet:** after "…with the exception text as the message.", add: "The message names the failed step, e.g. "Reading the document from Source failed: HTTP 404"."
   - **3, units table:**
     - `dependencies`: "Uses" becomes `config`, `clients`, `store`, `runner`, and "(settings, Source client, later store and runner)" becomes "(settings, Source client, job store, runner)";
