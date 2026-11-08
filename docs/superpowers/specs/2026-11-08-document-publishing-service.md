@@ -78,14 +78,16 @@ One `docker compose up --build` starts all four.
 | Unit | Responsibility | Uses |
 |---|---|---|
 | `config` | Reads settings from environment variables (section 10) | — |
-| `models` | Job record, job states, request and response shapes | — |
-| `auth` | Issues tokens; checks the bearer token | `config` |
+| `models/` | Pydantic models, one module per resource: `documents.py` (`Document`, Source's metadata), later the job record, job states and request/response shapes | — |
+| `auth` | Issues tokens; checks the bearer token | `config`, `dependencies` |
 | `store` | Jobs in memory plus JSON files; finds a job by document | `models` |
 | `archive` | Writes a file durably to a stable path; verifies it by sha256 | — |
 | `clients` | Source and Vendor HTTP calls; sorts failures into temporary or permanent | — |
 | `backoff` | Retry helper with exponential backoff and full jitter | `clients` (error types) |
 | `runner` | Runs jobs as asyncio tasks, limited by a semaphore; startup handling; retries; retry cron | `store`, `archive`, `clients`, `backoff` |
-| `main` | HTTP endpoints, CORS, startup and shutdown | `auth`, `store`, `runner`, `clients` (document list) |
+| `routers/` | HTTP endpoints, one FastAPI `APIRouter` module per area: `health.py`, `auth.py`, `documents.py`, later `jobs.py` | `auth`, `dependencies`, `models`, `clients`, `store`, `runner` |
+| `dependencies` | FastAPI dependencies that hand shared objects (settings, Source client, later store and runner) from `app.state` to routes | `config`, `clients` |
+| `main` | `create_app()`: builds settings and clients, adds CORS, includes the routers, runs startup and shutdown | `routers`, `clients`, `config` |
 
 ### Concurrency rule
 
@@ -512,8 +514,9 @@ Vue 3 + Vite + TypeScript, built to static files and served by nginx. The API ad
 - `docker compose run --rm -T tests` runs `pytest` over `api/tests`.
 - The image's entrypoint is `pytest`, so extra arguments go straight to it, for example `docker compose run --rm -T tests tests/test_auth.py -v`. The container starts in `/workspace/api`, so paths are relative to `api/`.
 - `-T` turns off the TTY, so the command also works in Git Bash on Windows and in CI.
+- `docker compose run --rm -T lint` checks all Python code (`api/`, `stubs/`) with ruff, using the rules in `ruff.toml`.
 
-Section 11 describes the `tests` service.
+Section 11 describes the `tests` and `lint` services.
 
 **Setup:**
 - The API and both stubs run inside the test process, connected with `httpx.ASGITransport`. No other containers and no network are used; everything runs in the test process.
@@ -546,7 +549,7 @@ Section 11 describes the `tests` service.
 | `api/tests/test_retry.py` | <ul><li>Manual retry after a vendor failure: `done`, 1 delivery, Source shows `Published`.</li><li>Retry of a job that isn't `failed`: 409.</li><li>Retry while the job's last run is still finishing: 409 (uses an injected fake pending task).</li><li>Retry with a damaged archive after a lost delete answer: checkpoints kept, "manual action needed".</li><li>Damaged archive and a metadata read that fails: checkpoints kept.</li><li>Retry after a lost delete answer (5.4): archive kept, delivered.</li><li>Retry with a damaged archive while the original still exists: re-read from Source.</li><li>A cron run retries every failed job.</li><li>The cron skips jobs at `AUTO_RETRY_MAX`.</li><li>The cron retries a waiting status write without a limit.</li><li>An exception in one run doesn't stop the cron.</li><li>Manual retry and a cron run together: 1 run.</li><li>A `queued` job with no task is resubmitted by the cron.</li><li>`nextRetryAt` shows the next cron run for eligible jobs, and is `null` otherwise or while the job has a task.</li><li>A retry after a vendor failure skips steps 1–4.</li></ul> |
 | `api/tests/test_pipeline.py` | <ul><li>Call order across both stubs: get, get_content, archive_link, delete, vendor post, status.</li><li>With `MAX_CONCURRENT_JOBS=2`, 5 publishes run at most 2 at a time, while the others show `queued`.</li><li>The original is kept when archiving fails.</li><li>The original is kept when the archive copy is damaged before the delete.</li><li>An unknown document never reaches the vendor.</li><li>A status write refused with a 5xx or a 4xx other than 404 sets the job to `running`, and the next cron run writes it.</li><li>An unknown document (status write gets 404) ends `failed` with the "cannot be written" message, and Retry works.</li><li>An unexpected exception in step 6 doesn't kill the job.</li><li>A failure after the status was written still leaves the job `done` or `failed`, never `running`.</li><li>An unexpected exception before the outcome is set gives `Error`.</li><li>A damaged or missing archive copy after the delete is never sent to the vendor.</li><li>An empty exception message becomes the type name.</li><li>Long messages are cut to 500 characters.</li></ul> |
 | `api/tests/test_startup.py` | <ul><li>Jobs left `queued` or `running` become `failed` with "Interrupted by a service restart", with `Error` written to Source.</li><li>A job interrupted after step 4 delivers the archive copy on retry.</li><li>A job interrupted during step 5 is delivered once on retry.</li><li>A job killed after its outcome was saved but before step 6 has its status written at startup.</li><li>A corrupt job file is set aside, startup continues, and publishing that document answers 409.</li><li>That block still holds after a second restart.</li><li>A second corruption of the same document does not overwrite the first `.corrupt-*` file.</li><li>A leftover `.json.tmp` file is deleted, and is not loaded as a job.</li><li>A step-6-only run from `queued` that fails sets `running`.</li><li>A job killed after delivering, before its outcome was saved, ends `done` with `Published`.</li><li>A `failed` job is not touched at startup.</li></ul> |
-| `api/tests/test_documents.py` | <ul><li>`GET /documents` without a token: 401, with no call to Source.</li><li>With a token: Source's metadata objects, unchanged and in order, deleted ones included.</li><li>Each of these gives 502, never 500: Source unreachable; a timeout; a 4xx or 5xx answer; a body that isn't a JSON list; a list item that isn't an object with a string `id`.</li><li>Source is called exactly once, with no retries.</li></ul> |
+| `api/tests/test_documents.py` | <ul><li>`GET /documents` without a token: 401, with no call to Source.</li><li>With a token: Source's metadata objects, unchanged and in order, deleted ones included.</li><li>Each of these gives 502, never 500: Source unreachable; a timeout; a 4xx or 5xx answer; a body that isn't a JSON list; a list item that isn't a valid `Document`.</li><li>Source is called exactly once, with no retries.</li></ul> |
 | `api/tests/test_archive.py` | <ul><li>Stable path.</li><li>Storing twice is harmless.</li><li>No `.partial` file is left behind.</li><li>A damaged or missing file is detected.</li><li>Filename cleaning, including the empty → `document` fallback.</li><li>Paths outside the root are refused.</li></ul> |
 | `api/tests/test_store.py` | <ul><li>Lookup by document.</li><li>Reload from disk.</li><li>Newest first.</li><li>Atomic file write.</li></ul> |
 | `api/tests/test_backoff.py` | <ul><li>Temporary errors are retried until success.</li><li>It gives up after the last attempt.</li><li>Permanent errors are not retried.</li></ul> |
@@ -598,10 +601,17 @@ All Dockerfiles live in `docker/`. Every image is built with the repository root
   - It is in the Compose profile `test`, so `docker compose up` does not start it; `docker compose run --rm -T tests` does.
   - It needs no other container, because the tests run everything in-process.
   - Its packages change only when a requirements file changes; then it needs `docker compose build tests`.
+- **`lint` service:**
+  - Same image and mount as `tests`, but its entrypoint is `ruff check` and its working folder is `/workspace`, so it checks `api/` and `stubs/`.
+  - Also in the `test` profile.
+- **`ruff.toml`** (repository root):
+  - line length 120;
+  - rules `E`, `F`, `W`, `B`, `UP`, `SIM` and `I` (import order).
+  - `ruff` is pinned in `docker/tests-requirements.txt`.
 
 ### CI (`.github/workflows/ci.yml`, GitHub Actions)
 
-1. **Backend:** run `docker compose run --rm -T tests`, the same command as on a developer machine. It covers `api/tests`.
+1. **Backend:** run `docker compose run --rm -T lint`, then `docker compose run --rm -T tests`, the same commands as on a developer machine. A lint error fails the job.
 2. **Frontend (`web/`):** Node 20; `npm ci`; `npm run build`, which type-checks with `vue-tsc` and builds.
 3. **Images:** `docker compose build`. It runs only after jobs 1 and 2 pass.
 
