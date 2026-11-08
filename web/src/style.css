@@ -6,6 +6,7 @@
   --border: #e3e6eb;
   --accent: #2f5bea;
   --bad: #b42318;
+  --good: #067647;
   --wait-bg: #fff4dc;
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   color: var(--text);
@@ -31,3 +32,12 @@ table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
 th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--border); }
 td { overflow-wrap: anywhere; }
 .table-scroll { overflow-x: auto; }
+.state { font-weight: 600; white-space: nowrap; }
+.state.done { color: var(--good); }
+.state.failed { color: var(--bad); }
+.state.queued::before, .state.running::before {
+  content: ""; display: inline-block; width: 0.8em; height: 0.8em; margin-right: 6px; vertical-align: -0.1em;
+  border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }

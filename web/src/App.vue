@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import DocumentsTable from './components/DocumentsTable.vue'
+import JobList from './components/JobList.vue'
 import LoginForm from './components/LoginForm.vue'
+import PublishForm from './components/PublishForm.vue'
 import { logout, session } from './session'
 </script>
 
@@ -15,6 +17,10 @@ import { logout, session } from './session'
     </header>
     <p v-if="session.notice" class="notice">{{ session.notice }}</p>
     <LoginForm v-if="!session.token" />
-    <DocumentsTable v-else />
+    <template v-else>
+      <PublishForm />
+      <DocumentsTable />
+      <JobList />
+    </template>
   </main>
 </template>
