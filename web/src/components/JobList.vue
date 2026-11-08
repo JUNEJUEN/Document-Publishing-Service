@@ -2,7 +2,7 @@
 import { onMounted, onUnmounted, reactive, ref } from 'vue'
 import type { Job, JobState } from '../api'
 import { errorMessage } from '../http'
-import { jobList, retryFailedJob, startPolling, stopPolling } from '../jobs'
+import { jobList, retryAndRefresh, startPolling, stopPolling } from '../jobs'
 
 const LABELS: Record<JobState, string> = { queued: 'Waiting', running: 'Running', done: 'Done', failed: 'Failed' }
 const retrying = reactive(new Set<string>())
@@ -19,7 +19,7 @@ async function retry(jobId: string) {
   retrying.add(jobId)
   retryError.value = ''
   try {
-    await retryFailedJob(jobId)
+    await retryAndRefresh(jobId)
   } catch (e) {
     retryError.value = errorMessage(e)
   } finally {
@@ -50,7 +50,7 @@ onUnmounted(stopPolling)
             <td><span :class="['state', job.state]">{{ LABELS[job.state] }}</span></td>
             <td>{{ details(job) }}</td>
             <td>
-              <button v-if="job.state === 'failed'" :disabled="retrying.has(job.id)" @click="retry(job.id)">
+              <button v-if="job.canRetry" :disabled="retrying.has(job.id)" @click="retry(job.id)">
                 {{ retrying.has(job.id) ? 'Retrying…' : 'Retry' }}
               </button>
             </td>

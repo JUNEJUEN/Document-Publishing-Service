@@ -55,8 +55,8 @@ export async function publishAll(documentIds: string[]): Promise<string[]> {
   )
 }
 
-/** Runs a failed job again; refreshes the list at once, also when the retry is refused. */
-export async function retryFailedJob(jobId: string): Promise<void> {
+/** Retries a job (see canRetry); refreshes the list at once, also when the retry is refused. */
+export async function retryAndRefresh(jobId: string): Promise<void> {
   try {
     await retryJob(jobId)
   } finally {

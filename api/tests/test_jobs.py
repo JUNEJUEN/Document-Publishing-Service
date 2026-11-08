@@ -7,7 +7,7 @@ async def test_publish_answers_202_with_the_job_object(publish):
     body = response.json()
     assert set(body) == {
         "id", "requestId", "documentId", "state", "error", "createdAt", "updatedAt", "archivePath",
-        "vendorAttempts", "vendorReceipt", "statusReported",
+        "vendorAttempts", "vendorReceipt", "statusReported", "canRetry",
     }
     assert (body["requestId"], body["documentId"], body["state"]) == ("req-1", "doc-1", "queued")
     assert body["createdAt"].endswith("Z")
@@ -21,6 +21,7 @@ async def test_finished_job_shows_its_archive_path_and_receipt(published, source
     assert finished["archivePath"] == f"doc-1/{hashlib.sha256(content).hexdigest()}/doc-1.txt"
     assert finished["vendorAttempts"] == 1
     assert finished["statusReported"] is True
+    assert finished["canRetry"] is False  # done: nothing to retry
     assert finished["vendorReceipt"] == vendor_app.state.deliveries[finished["id"]].receipt_id
 
 
@@ -29,6 +30,7 @@ async def test_job_list_is_newest_first(api, auth_headers, published):
     response = await api.get("/jobs", headers=auth_headers)
     assert response.status_code == 200
     assert [j["id"] for j in response.json()] == [second["id"], first["id"]]
+    assert [j["canRetry"] for j in response.json()] == [False, False]  # both done
 
 
 async def test_unknown_job_is_404(api, auth_headers):

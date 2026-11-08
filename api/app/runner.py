@@ -30,7 +30,7 @@ class JobRecordUnreadable(Exception):
 
 
 class NotRetryable(Exception):
-    """Only a failed job whose last run has finished can be retried."""
+    """The job is neither failed nor owing its status, or its last run hasn't finished."""
 
 
 def _reason(exc: Exception) -> str:
@@ -92,9 +92,14 @@ class Runner:
             # We submit the job with outcome -> report job status back to the source CRM, not run it again
             self._submit(job)
 
+    def can_retry(self, job: Job) -> bool:
+        """Failed, or still owing Source its status, with no run going (spec 5.3)."""
+        owes_status = job.outcome is not None and not job.status_reported
+        return not self._has_task(job) and (job.state == "failed" or owes_status)
+
     def retry(self, job: Job) -> None:
-        """Runs a failed job again from its checkpoints (spec 5.3); no await, so it can't interleave."""
-        if job.state != "failed" or self._has_task(job):
+        """Runs a job again from its checkpoints (spec 5.3); no await, so it can't interleave."""
+        if not self.can_retry(job):
             raise NotRetryable(job.id)
         job.outcome = job.outcome_message = job.error = None
         job.status_reported = False

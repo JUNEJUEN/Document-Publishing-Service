@@ -26,6 +26,7 @@ export interface Job {
   archivePath: string | null
   vendorAttempts: number
   vendorReceipt: string | null
+  canRetry: boolean
 }
 
 class ApiError extends Error {

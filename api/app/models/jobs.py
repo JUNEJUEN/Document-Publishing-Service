@@ -17,7 +17,7 @@ def utc_now() -> datetime:
 class JobOut(ApiModel):
     """A job as the API shows it."""
 
-    # Lets Job load its snake_case files from disk.
+    # Lets models load snake_case data: job files, and view() in the jobs router.
     model_config = ConfigDict(validate_by_name=True)
 
     id: str = Field(default_factory=lambda: uuid4().hex)
@@ -31,6 +31,12 @@ class JobOut(ApiModel):
     vendor_receipt: str | None = None  # the Vendor's receipt id, proof of delivery; None until the Vendor confirms
     vendor_attempts: int = 0  # a counter, never reset
     status_reported: bool = False  # the outcome is written to Source
+
+
+class JobView(JobOut):
+    """A job as every job endpoint answers: its fields, plus whether Retry is allowed now."""
+
+    can_retry: bool
 
 
 class Job(JobOut):

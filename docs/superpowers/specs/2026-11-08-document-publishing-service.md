@@ -95,7 +95,7 @@ Everything runs in one process with one event loop. Three rules follow from that
 
 1. **No `await` during a state change.** Every state change is made in memory and then saved with a plain synchronous file write. No `await` sits between checking a job's state and changing it. This covers:
    - the duplicate check;
-   - `failed` → `queued` on a retry;
+   - `failed` or `running` (owing its status) → `queued` on a retry;
    - a run finishing.
 
    As a result, two requests, or a request and the cron, can never interleave on the same job, and no lock is needed.
@@ -192,7 +192,7 @@ This is one of the **two documented exceptions to R4**; the other is an unreadab
 **Step 6 fails for any other reason:** the job is *not* ended.
 - The state is set to `running`, even for a step-6-only run that started from `queued`.
 - `error` reads "Status not written yet: {reason}".
-- The next cron run tries the status write again.
+- The next cron run tries the status write again. Until then (the cron is skipped), the Retry button does: the job shows it through `canRetry`.
 
 These retries have **no limit**, so R4 always holds.
 
@@ -201,7 +201,7 @@ These retries have **no limit**, so R4 always holds.
 - When something unexpected escapes, the error is logged and the job is handled by where the run had got to:
   - **`status_reported` is already true:** `state` is set from `outcome` (`done` for `Published`, `failed` for `Error`), so the job can't stay `running`.
   - **`outcome` is empty:** it is set to `Error` with the exception's message.
-  - **Otherwise:** the job is treated like a failed step 6 above, and the next cron run picks it up.
+  - **Otherwise:** the job is treated like a failed step 6 above, and the next cron run (or the Retry button) picks it up.
 - So a run can never die silently.
 
 ### 4.5 States
@@ -221,7 +221,7 @@ The API does **not** resume unfinished jobs. On startup:
    - **`vendor_receipt` is set** (the job was killed after delivering): the outcome is `Published`.
    - **Otherwise:** the outcome is `Error`, with the message "Interrupted by a service restart".
    - If step 6 succeeds, the job becomes `done`, or `failed` with a Retry button. An automatic retry is planned while `auto_retries < AUTO_RETRY_MAX`.
-   - If step 6 fails, the job waits for the next cron run (4.4).
+   - If step 6 fails, the job waits for the next cron run (4.4) or the Retry button.
 2. **Jobs whose status is still waiting** (state `queued` or `running`, `outcome` set, `status_reported` false) are also submitted for step 6 straight away. `failed` jobs are not touched; the cron and the button handle them. This covers a job killed after its outcome was saved but before step 6.
 3. **The retry cron starts.** Its first run is one `AUTO_RETRY_INTERVAL` after startup.
 
@@ -279,7 +279,7 @@ Failures fall into two kinds:
 
 The manual endpoint and the retry cron share one function, `retry(job, automatic)`. It:
 
-1. **Acts only on `failed` jobs that have no running task.** Otherwise it does nothing: the API answers 409, and the cron skips the job.
+1. **Acts on a job with no running task that is either `failed`, or owes Source its status** (outcome saved, `status_reported` false). Otherwise it does nothing: the API answers 409, and the cron skips the job. The same rule gives the API's `canRetry`. Either way the job then runs again from its checkpoints: for a `Published` outcome only step 6 has work left; for an `Error` the failed step is tried again.
 2. **Clears the old result:** `outcome`, `outcome_message`, `status_reported` and `error`. Checkpoints are kept; 4.2 decides where the run starts.
 3. **Counts automatic retries:** if `automatic` is true, it adds 1 to `auto_retries`.
 4. **Re-queues the job:** it sets the state to `queued`, saves the job and submits it.
@@ -287,7 +287,7 @@ The manual endpoint and the retry cron share one function, `retry(job, automatic
 **Every failure can be retried, whatever its cause, including a 404.** A permanent problem simply fails again; after `AUTO_RETRY_MAX` automatic retries, only the button is left.
 
 **Manual retry:**
-- Allowed on any `failed` job, even after the automatic limit is reached.
+- Allowed on any `failed` job, or any job owing its status, even after the automatic limit is reached.
 - It does not change `auto_retries`.
 
 **The retry cron:**
@@ -384,6 +384,7 @@ Returned by the job endpoints.
 | `createdAt`, `updatedAt` | ISO 8601 UTC | `"2026-11-08T10:00:00Z"` |
 | `archivePath` | string \| null | `"doc-1/9a4e…/doc-1.txt"` |
 | `vendorAttempts` | int | `3` |
+| `canRetry` | bool | `true`. Whether `POST /jobs/{id}/retry` is allowed now; the UI shows Retry only from this. |
 | `vendorReceipt` | string \| null | `null` |
 | `statusReported` | bool | `true` |
 | `autoRetries` | int | `2` |
@@ -408,10 +409,10 @@ Returned by the job endpoints.
 | `GET /jobs/{id}` | yes | — | 200 | found | Job object |
 | | | | 401 | token problem | `{"detail": "…"}` |
 | | | | 404 | unknown id | `{"detail": "job not found"}` |
-| `POST /jobs/{id}/retry` | yes | no body | 202 | job was `failed`; now `queued` | Job object |
+| `POST /jobs/{id}/retry` | yes | no body | 202 | the job can be retried (`canRetry`); now `queued` | Job object |
 | | | | 401 | token problem | `{"detail": "…"}` |
 | | | | 404 | unknown id | `{"detail": "job not found"}` |
-| | | | 409 | job is not `failed`, or its last run is still finishing | `{"detail": "only failed jobs can be retried"}` |
+| | | | 409 | job can't be retried now (not failed and owing no status, or its last run is still finishing) | `{"detail": "this job can't be retried now"}` |
 | `GET /health` | no | — | 200 | always | `{"ok": true}` |
 
 **Why `documentId` is restricted:** it becomes a folder name, so the pattern blocks `..` and `../x`. As a second guard, the archive refuses any path that would land outside the archive root.
@@ -487,15 +488,15 @@ Vue 3 + Vite + TypeScript, built to static files and served by nginx. The API ad
 | Login | As in section 6. |
 | Header | Title and a "Log out" button. |
 | Publish | As the brief asks: a document-id field and a Publish button. The field also opens a dropdown of the documents that can still be published (from `GET /documents`: not deleted, no job yet), but any id can be typed, so it works even when the list can't load. A "Publish all (N)" button publishes every document in that dropdown, after a confirmation, because publishing deletes the originals in Source. The list loads after login and reloads each time the field gets focus, so new documents appear without a Refresh button. "Publish all" also stays disabled while the job list shows an error, because the page can't tell then which documents already have a job. Each publish sends a fresh `requestId` (`crypto.randomUUID()`, with a fallback). Errors show below the field, including "Source API unavailable" from a 502. |
-| Job list | The only list on the page. Polls `GET /jobs` every 2 s, and right after a publish or a retry. Polling stops on logout. Newest first. Columns: started, document, state, details, and a Retry button on failed jobs. |
+| Job list | The only list on the page. Polls `GET /jobs` every 2 s, and right after a publish or a retry. Polling stops on logout. Newest first. Columns: started, document, state, details, and a Retry button whenever `canRetry` is true. |
 
 **How each state is shown:**
 
 | State | Shown as |
 |---|---|
-| Waiting, Running | Spinner. Details: the waiting reason from `error` when there is one, otherwise "Vendor attempts so far: {vendorAttempts}". When `nextRetryAt` is set (a status write still waiting), add "Next try at {time}". |
+| Waiting, Running | Spinner. Details: the waiting reason from `error` when there is one, otherwise "Vendor attempts so far: {vendorAttempts}". A Running job that owes its status ("Status not written yet: …") also shows a **Retry** button, through `canRetry`. When `nextRetryAt` is set (a status write still waiting), add "Next try at {time}". |
 | Done | Green, with the vendor receipt. |
-| Failed | Red, with the reason. A **Retry** button, plus "Next automatic retry at {time} (retry {autoRetries + 1} of {autoRetryMax})" when `nextRetryAt` is set. |
+| Failed | Red, with the reason. A **Retry** button (shown whenever `canRetry` is true, which also covers a Running job that owes its status), plus "Next automatic retry at {time} (retry {autoRetries + 1} of {autoRetryMax})" when `nextRetryAt` is set. |
 
 **Waiting states:**
 - "Loading jobs…" before the first answer.
@@ -545,7 +546,7 @@ Section 11 describes the `tests` and `lint` services.
 | `api/tests/test_auth.py` **(brief: rejected unauthenticated call)** | <ul><li>Anonymous `/publish` gets 401, with no job created and no Source or Vendor calls.</li><li>Every bad-token case from section 6 gets 401.</li><li>An expired or forged token gets 401.</li><li>A broken body without a token gets 401.</li><li>Token endpoint gets 401 for: wrong values; a missing field; a JSON body; a non-ASCII value.</li><li>A valid login works.</li><li>`/documents`, `/jobs`, `/jobs/{id}` and `/jobs/{id}/retry` without a token get 401.</li><li>A broken body with a token gets 422.</li><li>A `documentId` that tries to leave the archive folder gets 422.</li></ul> |
 | `api/tests/test_idempotency.py` **(brief: retry rule, i.e. the caller retries)** | <ul><li>Same `requestId` twice: same job, 1 delivery, 1 delete.</li><li>10 simultaneous duplicates: 1 job.</li><li>Duplicate after the job finished: same job.</li><li>Duplicate after a restart: same job, no new delivery.</li><li>New `requestId` for the same document: same job.</li></ul> |
 | `api/tests/test_vendor_failure.py` **(brief: vendor failure)** | <ul><li>Outcomes fail, fail-after-store, ok: `done`, 3 attempts, 1 delivery.</li><li>Fail-after-store twice: 1 delivery.</li><li>3 failures: `failed`, `Error` in Source, archive copy kept, `nextRetryAt` shows the next cron run.</li></ul> |
-| `api/tests/test_retry.py` | <ul><li>Manual retry after a vendor failure: `done`, 1 delivery, Source shows `Published`.</li><li>Retry of a job that isn't `failed`: 409.</li><li>Retry while the job's last run is still finishing: 409 (uses an injected fake pending task).</li><li>Retry with a damaged archive after a lost delete answer: checkpoints kept, "manual action needed".</li><li>Damaged archive and a metadata read that fails: checkpoints kept.</li><li>Retry after a lost delete answer (5.4): archive kept, delivered.</li><li>Retry with a damaged archive while the original still exists: re-read from Source.</li><li>A cron run retries every failed job.</li><li>The cron skips jobs at `AUTO_RETRY_MAX`.</li><li>The cron retries a waiting status write without a limit.</li><li>An exception in one run doesn't stop the cron.</li><li>Manual retry and a cron run together: 1 run.</li><li>A `queued` job with no task is resubmitted by the cron.</li><li>`nextRetryAt` shows the next cron run for eligible jobs, and is `null` otherwise or while the job has a task.</li><li>A retry after a vendor failure skips steps 1–4.</li></ul> |
+| `api/tests/test_retry.py` | <ul><li>Manual retry after a vendor failure: `done`, 1 delivery, Source shows `Published`.</li><li>Retry of a `done` job: 409, and `canRetry` false.</li><li>Retry writes a status Source refused: only step 6 runs, Source shows `Published`.</li><li>Retry of a job owing an `Error` status runs it again: delivery, then the status.</li><li>A job still writing its status can't be retried: `canRetry` false, 409.</li><li>Retry while the job's last run is still finishing: 409 (uses an injected fake pending task).</li><li>Retry with a damaged archive after a lost delete answer: checkpoints kept, "manual action needed".</li><li>Damaged archive and a metadata read that fails: checkpoints kept.</li><li>Retry after a lost delete answer (5.4): archive kept, delivered.</li><li>Retry with a damaged archive while the original still exists: re-read from Source.</li><li>A cron run retries every failed job.</li><li>The cron skips jobs at `AUTO_RETRY_MAX`.</li><li>The cron retries a waiting status write without a limit.</li><li>An exception in one run doesn't stop the cron.</li><li>Manual retry and a cron run together: 1 run.</li><li>A `queued` job with no task is resubmitted by the cron.</li><li>`nextRetryAt` shows the next cron run for eligible jobs, and is `null` otherwise or while the job has a task.</li><li>A retry after a vendor failure skips steps 1–4.</li></ul> |
 | `api/tests/test_pipeline.py` | <ul><li>Call order across both stubs: get, get_content, archive_link, delete, vendor post, status.</li><li>With `MAX_CONCURRENT_JOBS=2`, 5 publishes run at most 2 at a time, while the others show `queued`.</li><li>The original is kept when archiving fails.</li><li>The original is kept when the archive copy is damaged before the delete.</li><li>An unknown document never reaches the vendor.</li><li>A status write refused with a 5xx or a 4xx other than 404 sets the job to `running`, and the next cron run writes it.</li><li>An unknown document (status write gets 404) ends `failed` with the "cannot be written" message, and Retry works.</li><li>An unexpected exception in step 6 doesn't kill the job.</li><li>A failure after the status was written still leaves the job `done` or `failed`, never `running`.</li><li>An unexpected exception before the outcome is set gives `Error`.</li><li>A damaged or missing archive copy after the delete is never sent to the vendor.</li><li>An empty exception message becomes the type name.</li><li>Long messages are cut to 500 characters.</li></ul> |
 | `api/tests/test_jobs.py` | <ul><li>`POST /publish` answers 202 with the Job object.</li><li>A finished job shows its archive path.</li><li>`GET /jobs` is newest first.</li><li>An unknown job id gets 404.</li></ul> |
 | `api/tests/test_startup.py` | <ul><li>Jobs left `queued` or `running` become `failed` with "Interrupted by a service restart", with `Error` written to Source.</li><li>A job interrupted after step 4 delivers the archive copy on retry.</li><li>A job interrupted during step 5 is delivered once on retry.</li><li>A job killed after its outcome was saved but before step 6 has its status written at startup.</li><li>A corrupt job file is set aside, startup continues, and publishing that document answers 409.</li><li>That block still holds after a second restart.</li><li>A second corruption of the same document does not overwrite the first `.corrupt-*` file.</li><li>A leftover `.json.tmp` file is deleted, and is not loaded as a job.</li><li>A step-6-only run from `queued` that fails sets `running`.</li><li>A job killed after delivering, before its outcome was saved, ends `done` with `Published`.</li><li>A `failed` job is not touched at startup.</li></ul> |
@@ -633,8 +634,8 @@ A feature only uses things built in earlier features. Its tests only cover what 
 | 8 | Status write-back (step 6); the job completes; final-state rules and outer guard | 4.3–4.5, 5.2 | A failed status write leaves the job `running`; writing it again comes with the cron, and its test is written in feature 11. The "404, then Retry works" test is written in feature 10. A run that starts from a saved outcome (step 6 only, 4.2) comes with features 9 and 11, which start such runs. |
 | 9 | Restart handling: interrupted jobs, corrupt and temp job files, shutdown | 4.1, 4.6 | The "delivered on retry" tests for interrupted jobs are written in feature 10. `ApiFactory.shutdown()` stops job tasks in tests. A restart is simulated by building a second API on the same data folder. |
 | 10 | Retry button and `retry()` | 3 (rule 2), 4.2 (checking an existing archive copy), 5.3, 5.4, 7.2, 8 | Also adds the deferred tests from features 4, 8 and 9. "Manual retry and a cron run together" is written in feature 11. `retry(job)` here is the manual path. The `automatic` flag and `auto_retries` come with the cron in feature 11. |
-| 11 | Retry cron, `nextRetryAt`, `autoRetries`, `autoRetryMax` | 5.3, 7.1, 8 ("Next automatic retry"), 10 (`AUTO_RETRY_*`) | Writes the cron tests in `test_retry.py`, and adds the deferred tests from features 7, 8 and 10. |
-| 12 | CI | 11 (CI) | — |
+| 11 | Retry cron, `nextRetryAt`, `autoRetries`, `autoRetryMax` | 5.3, 7.1, 8 ("Next automatic retry"), 10 (`AUTO_RETRY_*`) | Writes the cron tests in `test_retry.py`, and adds the deferred tests from features 7, 8 and 10. **Skipped for now** (owner's decision): failed jobs are retried only by the Retry button. D9, 5.3 and the `AUTO_RETRY_*` settings describe this planned feature. The tests deferred to it from features 7, 8 and 10 stay deferred. |
+| 12 | CI | 11 (CI) | `.github/workflows/ci.yml`: backend (lint, tests), frontend (`npm ci`, build), then images. It runs on pushes to `main` and on every pull request, with read-only permissions, no secrets and a 15-minute timeout per job. |
 
 ## 13. Local environment
 

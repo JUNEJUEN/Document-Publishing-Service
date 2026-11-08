@@ -6,11 +6,18 @@ from pydantic import ValidationError
 
 from ..auth import require_token
 from ..dependencies import get_runner, get_store
-from ..models.jobs import Job, JobOut, PublishRequest
+from ..models.jobs import Job, JobOut, JobView, PublishRequest
 from ..runner import JobRecordUnreadable, NotRetryable, Runner
 from ..store import JobStore
 
 router = APIRouter(dependencies=[Depends(require_token)])
+VISIBLE_FIELDS = set(JobOut.model_fields)
+
+
+def view(job: Job, runner: Runner) -> JobView:
+    """The job as the API shows it; the runner knows whether Retry is allowed now."""
+    return JobView(**job.model_dump(include=VISIBLE_FIELDS), can_retry=runner.can_retry(job))
+
 
 # The body is read by hand, so OpenAPI needs to be told about it.
 PUBLISH_BODY = {
@@ -20,7 +27,7 @@ PUBLISH_BODY = {
 
 
 @router.post("/publish", status_code=202, openapi_extra={"requestBody": PUBLISH_BODY})
-async def publish(request: Request, runner: Annotated[Runner, Depends(get_runner)]) -> JobOut:
+async def publish(request: Request, runner: Annotated[Runner, Depends(get_runner)]) -> JobView:
     # Read after the token check, so an anonymous broken body gets 401, not 422.
     try:
         order = PublishRequest.model_validate_json(await request.body())
@@ -28,14 +35,16 @@ async def publish(request: Request, runner: Annotated[Runner, Depends(get_runner
         errors = [{**error, "loc": ("body", *error["loc"])} for error in exc.errors(include_url=False)]
         raise RequestValidationError(errors) from None
     try:
-        return runner.publish(order.document_id, order.request_id)
+        return view(runner.publish(order.document_id, order.request_id), runner)
     except JobRecordUnreadable:
         raise HTTPException(409, "The job record for this document is unreadable; manual action needed") from None
 
 
 @router.get("/jobs")
-async def list_jobs(store: Annotated[JobStore, Depends(get_store)]) -> list[JobOut]:
-    return store.newest_first()
+async def list_jobs(
+    store: Annotated[JobStore, Depends(get_store)], runner: Annotated[Runner, Depends(get_runner)]
+) -> list[JobView]:
+    return [view(job, runner) for job in store.newest_first()]
 
 
 def job_or_404(job_id: str, store: Annotated[JobStore, Depends(get_store)]) -> Job:
@@ -46,14 +55,18 @@ def job_or_404(job_id: str, store: Annotated[JobStore, Depends(get_store)]) -> J
 
 
 @router.get("/jobs/{job_id}")
-async def get_job(job: Annotated[Job, Depends(job_or_404)]) -> JobOut:
-    return job
+async def get_job(
+    job: Annotated[Job, Depends(job_or_404)], runner: Annotated[Runner, Depends(get_runner)]
+) -> JobView:
+    return view(job, runner)
 
 
 @router.post("/jobs/{job_id}/retry", status_code=202)
-async def retry_job(job: Annotated[Job, Depends(job_or_404)], runner: Annotated[Runner, Depends(get_runner)]) -> JobOut:
+async def retry_job(
+    job: Annotated[Job, Depends(job_or_404)], runner: Annotated[Runner, Depends(get_runner)]
+) -> JobView:
     try:
         runner.retry(job)
     except NotRetryable:
-        raise HTTPException(409, "only failed jobs can be retried") from None
-    return job
+        raise HTTPException(409, "this job can't be retried now") from None
+    return view(job, runner)
