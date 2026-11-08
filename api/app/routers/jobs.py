@@ -27,12 +27,12 @@ async def publish(request: Request, runner: Annotated[Runner, Depends(get_runner
     except ValidationError as exc:
         errors = [{**error, "loc": ("body", *error["loc"])} for error in exc.errors(include_url=False)]
         raise RequestValidationError(errors) from None
-    return JobOut.model_validate(runner.publish(order.document_id, order.request_id))
+    return runner.publish(order.document_id, order.request_id)
 
 
 @router.get("/jobs")
 async def list_jobs(store: Annotated[JobStore, Depends(get_store)]) -> list[JobOut]:
-    return [JobOut.model_validate(job) for job in store.newest_first()]
+    return store.newest_first()
 
 
 @router.get("/jobs/{job_id}")
@@ -40,4 +40,4 @@ async def get_job(job_id: str, store: Annotated[JobStore, Depends(get_store)]) -
     job = store.get(job_id)
     if job is None:
         raise HTTPException(404, "job not found")
-    return JobOut.model_validate(job)
+    return job

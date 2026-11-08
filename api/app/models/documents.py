@@ -1,11 +1,12 @@
-from pydantic import BaseModel, ConfigDict
-from pydantic.alias_generators import to_camel
+from pydantic import ConfigDict
+
+from .base import ApiModel
 
 
-class Document(BaseModel):
+class Document(ApiModel):
     """A document's metadata as the Source API reports it."""
 
-    model_config = ConfigDict(alias_generator=to_camel, strict=True)
+    model_config = ConfigDict(strict=True)
 
     id: str
     filename: str
