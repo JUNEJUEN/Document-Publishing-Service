@@ -1,4 +1,25 @@
 # Document Publishing Service
+
+## Table of Contents
+- [AI Usage](#ai-usage)
+- [I. Getting started](#i-getting-started)
+  - [Start the service](#start-the-service)
+  - [Open the portal to publish documents](#open-the-portal-to-publish-documents)
+  - [Reset the test data](#reset-the-test-data)
+  - [Run API Tests](#run-api-tests)
+  - [Run code style check](#run-code-style-check)
+- [II. Decisions I made](#ii-decisions-i-made)
+  - [Tech Stack](#tech-stack)
+  - [API Design](#api-design)
+  - [Authentication Flow](#authentication-flow)
+  - [Running a Job Flow](#running-a-job-flow)
+  - [Error Handling](#error-handling)
+- [III. What I would change for real production use](#iii-what-i-would-change-for-real-production-use)
+  - [Authentication between frontend and backend](#authentication-between-frontend-and-backend)
+  - [Each job should be handled by a lambda / worker queue](#each-job-should-be-handled-by-a-lambda--worker-queue)
+  - [Cloud storage and managed database](#cloud-storage-and-managed-database)
+  - [Dedicated Cron/Scheduler service](#dedicated-cronscheduler-service)
+
 ## AI Usage
 AI Tool : Claude
 - **Design & Planning**: I provided the task requirements and my draft design ideas. The AI reviewed them and helped complete the final design.
@@ -21,6 +42,16 @@ Login with :
 - Client Secret = demo-secret
 
 You can set up the Client ID and Client Secret in .env (Copy .env.example)
+
+### Reset the test data
+Publishing deletes documents from the Source stub. To start again with a fresh set of 100 documents, remove the data volumes and start the service again:
+```
+docker compose down -v
+docker compose up -d --wait --build
+```
+This also clears the job history, archive and Vendor deliveries, so all services start clean together.
+
+The number of test documents of source stub could be set throuh SEED_DOCUMENTS
 
 ### Run API Tests
 ``` 
@@ -71,9 +102,22 @@ Each job runs in the background as its own asyncio task, so the API replies righ
 1. **Quick retry inside a run:**
    Temporary errors (network issues, 10s timeouts, 429, 5xx) are automatically retried up to 3 times using exponential backoff with jitter. Permanent errors (4xx, hash mismatch) fail immediately.
 2. **When system crashes or restarts:**
-   Unfinished running jobs are marked as `failed` with the error `"Interrupted by a service restart"`, and the status is reported to Source CRM. Safe checkpoints allow retries to pick up where the job left off without re-doing completed work.
+   On startup, before taking any requests, the system finds every job that was still in progress and gives it a final result:
+   - If the Vendor already received the file, the job is marked **Published** (`done`).
+   - Otherwise, it is marked **Error** with `"Interrupted by a service restart"` (`failed`).
+
+   This result is then written back to Source CRM. The system does **not** continue the interrupted work on its own. A failed job only runs again when a user clicks **Retry**, and it picks up from its saved checkpoints instead of starting over.
 3. **Manual Retry:**
-   Failed jobs show a **Retry** button in the UI (`POST /jobs/{id}/retry`), allowing manual re-execution from the last valid checkpoint.
+   Failed jobs show a **Retry** button in the UI (`POST /jobs/{id}/retry`), allowing manual re-execution from the last valid checkpoint. A retry skips every step whose checkpoint is already saved:
+
+   | Checkpoint saved | Step it skips |
+   |---|---|
+   | `archive_path` (with `sha256`) | 1 Read + 2 Archive |
+   | `archive_linked = True` | 3 Link |
+   | `source_deleted = True` | 4 Delete |
+   | `vendor_receipt` | 5 Deliver |
+
+   Step 6 (Report) always runs again so Source CRM gets the new outcome.
 
 ## III. What I would change for real production use
 
