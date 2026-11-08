@@ -11,6 +11,7 @@ DEFAULT_DATA_DIR = Path("/data")
 DEFAULT_ORIGINS = ("http://localhost:8080",)
 DEFAULT_SOURCE_API_URL = "http://source-stub:8001"
 DEFAULT_HTTP_TIMEOUT = 10.0
+DEFAULT_MAX_CONCURRENT_JOBS = 10
 
 
 def _positive_number(
@@ -43,6 +44,7 @@ class Settings:
     cors_origins: tuple[str, ...] = DEFAULT_ORIGINS
     source_api_url: str = DEFAULT_SOURCE_API_URL
     http_timeout: float = DEFAULT_HTTP_TIMEOUT
+    max_concurrent_jobs: int = DEFAULT_MAX_CONCURRENT_JOBS
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -60,4 +62,5 @@ class Settings:
             cors_origins=origins or DEFAULT_ORIGINS,
             source_api_url=env.get("SOURCE_API_URL") or DEFAULT_SOURCE_API_URL,
             http_timeout=_positive_float(env, "HTTP_TIMEOUT", DEFAULT_HTTP_TIMEOUT),
+            max_concurrent_jobs=_positive_int(env, "MAX_CONCURRENT_JOBS", DEFAULT_MAX_CONCURRENT_JOBS),
         )
