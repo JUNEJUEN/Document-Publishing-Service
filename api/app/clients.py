@@ -1,4 +1,5 @@
 """HTTP clients for the external systems."""
+
 import httpx
 from pydantic import TypeAdapter, ValidationError
 
@@ -27,18 +28,23 @@ class SourceClient:
     def __init__(self, http: httpx.AsyncClient):
         self._http = http
 
+    # API to get document lists (file name, file id, etc)
     async def list_documents(self) -> list[Document]:
         return _parse(await self._call("GET", "/documents"), _DOCUMENT_LIST, "a document list")
 
+    # API to get 1 document (file name, file id, etc)
     async def get_document(self, document_id: str) -> Document:
         return _parse(await self._call("GET", f"/documents/{document_id}"), _DOCUMENT, "a document")
 
+    # API to get 1 documment file content
     async def get_content(self, document_id: str) -> bytes:
         return (await self._call("GET", f"/documents/{document_id}/content")).content
 
+    # API to update the archive link of 1 document
     async def set_archive_link(self, document_id: str, uri: str, sha256: str) -> None:
         await self._call("PUT", f"/documents/{document_id}/archive-link", json={"uri": uri, "sha256": sha256})
 
+    # API to delete 1 document
     async def delete_document(self, document_id: str) -> None:
         await self._call("DELETE", f"/documents/{document_id}")
 
