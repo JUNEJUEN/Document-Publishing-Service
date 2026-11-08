@@ -32,3 +32,12 @@ async def test_new_request_id_for_the_same_document_gives_the_same_job(publish, 
     await settle()
     assert second.json()["id"] == first.json()["id"]
     assert second.json()["requestId"] == "req-1"
+
+
+async def test_duplicate_after_a_restart_gives_the_same_job(published, make_api, auth_headers, events):
+    finished = await published("doc-1")
+    restarted = await make_api()  # a new API process on the same saved jobs
+    again = await restarted.post("/publish", json={"documentId": "doc-1", "requestId": "r2"}, headers=auth_headers)
+    await make_api.settle()
+    assert again.json()["id"] == finished["id"]
+    assert events.count(("vendor", "post", finished["id"])) == 1  # not delivered again

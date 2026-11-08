@@ -35,6 +35,7 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+        runner.recover()
         yield
         await runner.shutdown()
         for client in owned:

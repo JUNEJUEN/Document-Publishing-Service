@@ -214,3 +214,20 @@ async def test_failure_after_the_status_was_written_still_ends_the_job(published
     record = saved(settings)
     assert (record["state"], record["error"], record["status_reported"]) == ("done", None, True)
     assert f"Job {finished['id']}: unexpected error" in caplog.text
+
+
+async def test_shutdown_leaves_a_running_job_as_it_is(make_api, source_app, auth_headers, settings):
+    reached = asyncio.Event()
+
+    async def hold_status_write(request: httpx.Request) -> None:
+        if request.url.path.endswith("/status"):
+            reached.set()
+            await asyncio.Event().wait()  # never answers
+
+    api = await make_api(source=intercept(source_app, hold_status_write))
+    await api.post("/publish", json={"documentId": "doc-1", "requestId": "r"}, headers=auth_headers)
+    async with asyncio.timeout(2):
+        await reached.wait()
+    await make_api.shutdown()
+    record = saved(settings)  # cancelled, not rescued: startup will finish it
+    assert (record["state"], record["error"], record["outcome"]) == ("running", None, "Published")

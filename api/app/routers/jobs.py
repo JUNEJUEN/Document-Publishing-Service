@@ -7,7 +7,7 @@ from pydantic import ValidationError
 from ..auth import require_token
 from ..dependencies import get_runner, get_store
 from ..models.jobs import JobOut, PublishRequest
-from ..runner import Runner
+from ..runner import JobRecordUnreadable, Runner
 from ..store import JobStore
 
 router = APIRouter(dependencies=[Depends(require_token)])
@@ -27,7 +27,10 @@ async def publish(request: Request, runner: Annotated[Runner, Depends(get_runner
     except ValidationError as exc:
         errors = [{**error, "loc": ("body", *error["loc"])} for error in exc.errors(include_url=False)]
         raise RequestValidationError(errors) from None
-    return runner.publish(order.document_id, order.request_id)
+    try:
+        return runner.publish(order.document_id, order.request_id)
+    except JobRecordUnreadable:
+        raise HTTPException(409, "The job record for this document is unreadable; manual action needed") from None
 
 
 @router.get("/jobs")

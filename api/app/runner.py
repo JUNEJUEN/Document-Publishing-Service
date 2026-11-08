@@ -16,12 +16,17 @@ MAX_MESSAGE = 500
 DAMAGED_AFTER_DELETE = "Archive copy damaged or missing after the original was deleted; manual action needed"
 NOT_IN_SOURCE = "Document not found in Source; the status cannot be written."
 STATUS_PENDING = "Status not written yet: "
+INTERRUPTED = "Interrupted by a service restart"
 
 log = logging.getLogger(__name__)
 
 
 class StepFailed(Exception):
     pass
+
+
+class JobRecordUnreadable(Exception):
+    """The document's job file could not be read at startup; publishing it waits for manual action."""
 
 
 def _reason(exc: Exception) -> str:
@@ -61,13 +66,29 @@ class Runner:
     def publish(self, document_id: str, request_id: str) -> Job:
         """The document's job: the existing one, or a new one that starts now."""
 
+        if self._store.is_blocked(document_id):
+            raise JobRecordUnreadable(document_id)
         # Find any job now that has the same document id
         job = self._store.by_document(document_id)
         if job is None:
             job = Job(document_id=document_id, request_id=request_id)
             self._store.save(job)
-            self._tasks[job.id] = asyncio.create_task(self._run(job))
+            self._submit(job)
         return job
+
+    def recover(self) -> None:
+        """Startup (spec 4.6): interrupted jobs get an outcome; every unwritten status is written."""
+        for job in self._store.newest_first():
+            if job.state not in ("queued", "running"):
+                continue  # finished jobs: done never runs again; failed waits for a retry
+            if job.outcome is None:
+                # A receipt means it was delivered before the kill.
+                job.outcome, job.outcome_message = ("Published", None) if job.vendor_receipt else ("Error", INTERRUPTED)
+                self._store.save(job)
+            self._submit(job)
+
+    def _submit(self, job: Job) -> None:
+        self._tasks[job.id] = asyncio.create_task(self._run(job))
 
     async def wait_idle(self) -> None:
         """Waits until every job task has finished."""
@@ -84,9 +105,11 @@ class Runner:
         async with self._slots:
             # Outer guard: no unexpected error ends a run silently. Cancellation passes through.
             try:
-                job.state = "running"
-                self._store.save(job)
-                await self._decide_outcome(job)
+                # A job with an outcome already only needs step 6, and keeps its state until then.
+                if job.outcome is None:
+                    job.state = "running"
+                    self._store.save(job)
+                    await self._decide_outcome(job)
                 await self._report(job)
             except Exception as exc:
                 log.exception("Job %s: unexpected error", job.id)

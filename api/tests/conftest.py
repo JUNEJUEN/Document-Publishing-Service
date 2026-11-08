@@ -77,6 +77,11 @@ class ApiFactory:
         self._apps.append(app)
         return await enter(httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://api"))
 
+    async def shutdown(self) -> None:
+        """Stops every job task, as the app's shutdown does."""
+        for app in self._apps:
+            await app.state.runner.shutdown()
+
     async def settle(self) -> None:
         """Waits until every job task of every built API has finished."""
         for app in self._apps:
