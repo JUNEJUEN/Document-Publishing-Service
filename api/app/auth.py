@@ -1,11 +1,14 @@
 """Client-credentials tokens. Any problem with a token is a 401, never a 500."""
+
 import hmac
 import time
+from typing import Annotated
 
 import jwt
-from fastapi import HTTPException, Request
+from fastapi import Depends, HTTPException, Request
 
 from .config import Settings
+from .dependencies import get_settings
 
 ALGORITHM = "HS256"
 AUDIENCE = "publishing-api"
@@ -28,9 +31,8 @@ def unauthorized(detail: str) -> HTTPException:
     return HTTPException(401, detail, headers={"WWW-Authenticate": "Bearer"})
 
 
-def require_token(request: Request) -> str:
+def require_token(request: Request, settings: Annotated[Settings, Depends(get_settings)]) -> str:
     """Dependency: the client id from a valid bearer token, else 401."""
-    settings: Settings = request.app.state.settings
     scheme, _, token = request.headers.get("authorization", "").partition(" ")
     if scheme.lower() != "bearer" or not token.strip():
         raise unauthorized("invalid or expired token")
