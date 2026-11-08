@@ -2,7 +2,6 @@
 import DocumentsTable from './components/DocumentsTable.vue'
 import JobList from './components/JobList.vue'
 import LoginForm from './components/LoginForm.vue'
-import PublishForm from './components/PublishForm.vue'
 import { logout, session } from './session'
 </script>
 
@@ -17,10 +16,9 @@ import { logout, session } from './session'
     </header>
     <p v-if="session.notice" class="notice">{{ session.notice }}</p>
     <LoginForm v-if="!session.token" />
-    <template v-else>
-      <PublishForm />
+    <div v-else class="columns">
       <DocumentsTable />
       <JobList />
-    </template>
+    </div>
   </main>
 </template>

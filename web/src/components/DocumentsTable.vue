@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { fetchDocuments, type SourceDocument } from '../api'
 import { errorMessage } from '../http'
 import { jobList, publishDocument } from '../jobs'
+import PublishForm from './PublishForm.vue'
 
 const documents = ref<SourceDocument[]>([])
 const loaded = ref(false)
@@ -57,9 +58,11 @@ onMounted(refresh)
 <template>
   <section class="card">
     <div class="card-head">
-      <h2>Documents in Source</h2>
+      <h2>Publish documents</h2>
       <button class="secondary" :disabled="busy" @click="refresh">{{ busy ? 'Refreshing…' : 'Refresh' }}</button>
     </div>
+    <PublishForm />
+    <h3>Documents in Source</h3>
     <p v-if="error" class="error">{{ error }}</p>
     <p v-if="publishError" class="error">{{ publishError }}</p>
     <p v-if="!loaded" class="muted">Loading documents…</p>

@@ -22,7 +22,7 @@ async function submit() {
 </script>
 
 <template>
-  <form class="card" @submit.prevent="submit">
+  <form class="card login" @submit.prevent="submit">
     <h2>Log in</h2>
     <label>Client id <input v-model="clientId" autocomplete="username" required /></label>
     <label>Client secret <input v-model="clientSecret" type="password" autocomplete="current-password" required /></label>

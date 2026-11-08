@@ -22,10 +22,9 @@ async function submit() {
 </script>
 
 <template>
-  <form class="card" @submit.prevent="submit">
-    <h2>Start a publication</h2>
+  <form class="publish-form" @submit.prevent="submit">
     <label>Document id <input v-model="documentId" placeholder="doc-1" required /></label>
     <button :disabled="busy">{{ busy ? 'Publishing…' : 'Publish' }}</button>
-    <p v-if="error" class="error">{{ error }}</p>
   </form>
+  <p v-if="error" class="error">{{ error }}</p>
 </template>
