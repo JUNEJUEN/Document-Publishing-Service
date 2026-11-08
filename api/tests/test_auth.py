@@ -155,9 +155,49 @@ async def test_rejected_login_is_readable_by_the_web_app(api):
     assert response.headers["access-control-allow-origin"] == WEB
 
 
-@pytest.mark.parametrize("method, path", [("GET", "/documents")])
+@pytest.mark.parametrize(
+    "method, path", [("GET", "/documents"), ("POST", "/publish"), ("GET", "/jobs"), ("GET", "/jobs/some-id")]
+)
 async def test_protected_endpoints_need_a_token(api, source_events, method, path):
     response = await api.request(method, path)
     assert response.status_code == 401
     assert response.headers["www-authenticate"] == "Bearer"
     assert source_events == []  # rejected before any work
+
+
+async def test_anonymous_publish_is_rejected_and_does_nothing(api, auth_headers, source_events, settings):
+    response = await api.post("/publish", json={"documentId": "doc-1", "requestId": "req-1"})
+    assert response.status_code == 401
+    assert (await api.get("/jobs", headers=auth_headers)).json() == []
+    assert not any((settings.data_dir / "jobs").iterdir())
+    assert source_events == []
+
+
+BROKEN_BODIES = [b"{not json", b"[]", b'{"documentId": "doc-1"}', b'{"documentId": 5, "requestId": "r"}']
+
+
+@pytest.mark.parametrize("body", BROKEN_BODIES)
+async def test_broken_publish_body_without_a_token_gets_401(api, body):
+    response = await api.post("/publish", content=body, headers={"Content-Type": "application/json"})
+    assert response.status_code == 401
+
+
+@pytest.mark.parametrize("body", BROKEN_BODIES)
+async def test_broken_publish_body_with_a_token_gets_422(api, auth_headers, body):
+    headers = {**auth_headers, "Content-Type": "application/json"}
+    response = await api.post("/publish", content=body, headers=headers)
+    assert response.status_code == 422
+    assert all(error["loc"][0] == "body" for error in response.json()["detail"])  # FastAPI's usual shape
+
+
+@pytest.mark.parametrize(
+    "document_id, request_id",
+    [("..", "r"), ("../x", "r"), ("a/b", "r"), (".hidden", "r"), ("", "r"), ("x" * 129, "r"), ("doc-1", ""),
+     ("doc-1", "r" * 201)],
+    ids=["dot-dot", "parent", "slash", "leading-dot", "empty-id", "long-id", "empty-request", "long-request"],
+)
+async def test_unsafe_publish_values_get_422(api, auth_headers, source_events, document_id, request_id):
+    body = {"documentId": document_id, "requestId": request_id}
+    response = await api.post("/publish", json=body, headers=auth_headers)
+    assert response.status_code == 422
+    assert source_events == []
