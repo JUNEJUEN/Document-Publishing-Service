@@ -70,10 +70,24 @@ services:
         condition: service_healthy
 
   tests:
+    image: publishing-tests
     build:
       context: .
       dockerfile: docker/tests.Dockerfile
     profiles: ["test"]
+    volumes:
+      - .:/workspace
+
+  lint:
+    image: publishing-tests
+    build:
+      context: .
+      dockerfile: docker/tests.Dockerfile
+    profiles: ["test"]
+    entrypoint: ["ruff", "check"]
+    working_dir: /workspace
+    environment:
+      RUFF_NO_CACHE: "true"  # no .ruff_cache in the project folder
     volumes:
       - .:/workspace
 

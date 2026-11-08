@@ -1,0 +1,7 @@
+line-length = 120
+target-version = "py312"
+# Lets import sorting treat these as this project's own modules.
+src = ["api", "stubs"]
+
+[lint]
+select = ["E", "F", "W", "B", "UP", "SIM", "I"]
