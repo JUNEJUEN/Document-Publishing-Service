@@ -16,9 +16,11 @@
   - [Error Handling](#error-handling)
 - [III. What I would change for real production use](#iii-what-i-would-change-for-real-production-use)
   - [Authentication between frontend and backend](#authentication-between-frontend-and-backend)
+  - [Keep secrets out of config files](#keep-secrets-out-of-config-files)
   - [Each job should be handled by a lambda / worker queue](#each-job-should-be-handled-by-a-lambda--worker-queue)
   - [Cloud storage and managed database](#cloud-storage-and-managed-database)
   - [Dedicated Cron/Scheduler service](#dedicated-cronscheduler-service)
+  - [CD pipeline, releases and versioning](#cd-pipeline-releases-and-versioning)
 
 ## AI Usage
 AI Tool : Claude
@@ -126,6 +128,11 @@ Currently, the frontend holds the raw client secret in browser memory to silentl
 
 In production, we should replace in-memory client credentials renewal with standard OAuth2 Authorization Code flow with PKCE, or use secure, HTTP-only session cookies and refresh tokens.
 
+### Keep secrets out of config files
+Currently, `docker-compose.yml` has default values for `CLIENT_ID`, `CLIENT_SECRET` and `TOKEN_SECRET`, so the demo starts with one command. If the service were deployed without a `.env`, it would quietly use these known values, and anyone could log in or sign their own tokens.
+
+In production, client credentials should not be config at all: each client is a record in a `clients` table in the database, storing only a hash of its secret. The service's own secrets, like `TOKEN_SECRET` and the database password, should live in a secret manager (like AWS Secrets Manager), never in git, and the service should refuse to start if they are missing.
+
 ### Each job should be handled by a lambda / worker queue
 Move background jobs out of the FastAPI process into a distributed message queue (such as AWS SQS + Lambda, or Redis + Celery/ARQ) so the API server does not block or drop tasks during traffic spikes.
 
@@ -136,3 +143,8 @@ Replace local disk storage (`/data/jobs/` and `/data/archive/`) with cloud objec
 Currently, there is no cron job or automated scheduler running in the system. If a job fails, it stays in the failed state and will not run again on its own. Retrying a failed job currently depends entirely on a user manually clicking the Retry button in the web portal.
 
 In production, we should add a managed scheduler (like AWS EventBridge or Kubernetes CronJobs) to automatically find and retry eligible failed jobs on a regular schedule.
+
+### CD pipeline, releases and versioning
+Currently, the service is only run locally with Docker Compose, and there is no deployment pipeline or version number.
+
+In production, we should add a CD pipeline (like GitHub Actions) that runs when a release is tagged with a version number (e.g. `v1.2.0`, using semantic versioning). It builds the Docker images, tags them with that version, pushes them to a registry (like AWS ECR), and deploys them first to staging and then to production. Because every image has a version, we always know what is running and can roll back by deploying the previous version.
