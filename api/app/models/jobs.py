@@ -7,6 +7,7 @@ from pydantic import ConfigDict, Field
 from .base import ApiModel
 
 JobState = Literal["queued", "running", "done", "failed"]
+Outcome = Literal["Published", "Error"]  # the status written back to Source
 
 
 def utc_now() -> datetime:
@@ -29,6 +30,7 @@ class JobOut(ApiModel):
     archive_path: str | None = None
     vendor_receipt: str | None = None  # the Vendor's receipt id, proof of delivery; None until the Vendor confirms
     vendor_attempts: int = 0  # a counter, never reset
+    status_reported: bool = False  # the outcome is written to Source
 
 
 class Job(JobOut):
@@ -39,6 +41,8 @@ class Job(JobOut):
     sha256: str | None = None
     archive_linked: bool = False
     source_deleted: bool = False
+    outcome: Outcome | None = None  # set once steps 1-5 end
+    outcome_message: str | None = None  # why an Error; at most 500 characters
 
 
 class PublishRequest(ApiModel):

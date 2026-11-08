@@ -7,7 +7,7 @@ async def test_publish_answers_202_with_the_job_object(publish):
     body = response.json()
     assert set(body) == {
         "id", "requestId", "documentId", "state", "error", "createdAt", "updatedAt", "archivePath",
-        "vendorAttempts", "vendorReceipt",
+        "vendorAttempts", "vendorReceipt", "statusReported",
     }
     assert (body["requestId"], body["documentId"], body["state"]) == ("req-1", "doc-1", "queued")
     assert body["createdAt"].endswith("Z")
@@ -20,6 +20,7 @@ async def test_finished_job_shows_its_archive_path_and_receipt(published, source
     assert finished["error"] is None
     assert finished["archivePath"] == f"doc-1/{hashlib.sha256(content).hexdigest()}/doc-1.txt"
     assert finished["vendorAttempts"] == 1
+    assert finished["statusReported"] is True
     assert finished["vendorReceipt"] == vendor_app.state.deliveries[finished["id"]].receipt_id
 
 

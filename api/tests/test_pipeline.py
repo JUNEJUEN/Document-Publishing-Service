@@ -1,9 +1,13 @@
 import asyncio
+import json
 
 import httpx
 import pytest
 
 from app.archive import Archive
+from app.clients import SourceClient
+from app.runner import Runner
+from app.store import JobStore
 
 
 def intercept(source_app, before) -> httpx.MockTransport:
@@ -26,9 +30,10 @@ async def test_steps_run_in_order(published, source_app, vendor_app, events):
         ("source", "archive_link", "doc-1"),
         ("source", "delete", "doc-1"),
         ("vendor", "post", finished["id"]),
+        ("source", "status", "doc-1"),
     ]
     stored = source_app.state.documents["doc-1"]
-    assert stored.content is None
+    assert (stored.content, stored.status, stored.status_message) == (None, "Published", None)
     assert stored.archive_uri == f"archive://{finished['archivePath']}"
     # The Vendor got exactly the archive copy: its path holds that copy's sha256.
     assert vendor_app.state.deliveries[finished["id"]].sha256 == finished["archivePath"].split("/")[1]
@@ -85,11 +90,14 @@ async def test_original_is_kept_when_the_archive_copy_is_damaged_before_the_dele
     assert source_app.state.documents["doc-1"].content is not None
 
 
-async def test_unknown_document_fails_after_one_read(published, events):
+async def test_unknown_document_fails_and_no_status_can_be_written(published, events):
     finished = await published("doc-99")
-    assert finished["state"] == "failed"
-    assert finished["error"] == "Reading the document from Source failed: HTTP 404"
-    assert events == [("source", "get", "doc-99")]
+    assert (finished["state"], finished["statusReported"]) == ("failed", False)
+    assert finished["error"] == (
+        "Document not found in Source; the status cannot be written. "
+        "Reading the document from Source failed: HTTP 404"
+    )
+    assert events == [("source", "get", "doc-99"), ("source", "status", "doc-99")]
 
 
 @pytest.mark.parametrize(
@@ -106,15 +114,15 @@ async def test_error_message_is_never_empty_or_too_long(published, monkeypatch, 
     assert finished["error"] == expected
 
 
-def flaky(source_app, failures: int) -> httpx.MockTransport:
-    """The Source stub, but the first `failures` metadata reads answer 503."""
+def flaky(source_app, failures: int, path: str = "/documents/doc-1", status: int = 503) -> httpx.MockTransport:
+    """The Source stub, but the first `failures` calls to `path` answer `status`."""
     stub = httpx.ASGITransport(app=source_app)
     failed = []
 
     async def handler(request: httpx.Request) -> httpx.Response:
-        if request.url.path == "/documents/doc-1" and len(failed) < failures:
+        if request.url.path == path and len(failed) < failures:
             failed.append(request)
-            return httpx.Response(503)
+            return httpx.Response(status)
         return await stub.handle_async_request(request)
 
     return httpx.MockTransport(handler)
@@ -130,7 +138,7 @@ async def test_source_failing_every_attempt_fails_the_job(make_api, source_app, 
     api = await make_api(source=flaky(source_app, failures=2), source_max_attempts=2)
     finished = await published_on(api)
     assert finished["error"] == "Reading the document from Source failed: HTTP 503"
-    assert events == []  # the 503s never reached the stub, and nothing else was called
+    assert events == [("source", "status", "doc-1")]  # the 503s never reached the stub
 
 
 async def test_damaged_archive_copy_after_the_delete_is_never_delivered(
@@ -148,3 +156,61 @@ async def test_damaged_archive_copy_after_the_delete_is_never_delivered(
         "Archive copy damaged or missing after the original was deleted; manual action needed"
     )
     assert not [event for event in events if event[0] == "vendor"]
+
+
+def saved(settings, document_id: str = "doc-1") -> dict:
+    """The job record as saved on disk."""
+    return json.loads((settings.data_dir / "jobs" / f"{document_id}.json").read_text(encoding="utf-8"))
+
+
+@pytest.mark.parametrize("status", [503, 409])
+async def test_refused_status_write_leaves_the_job_running(make_api, source_app, published_on, status):
+    refusing = flaky(source_app, failures=99, path="/documents/doc-1/status", status=status)
+    finished = await published_on(await make_api(source=refusing))
+    assert (finished["state"], finished["statusReported"]) == ("running", False)
+    assert finished["error"] == f"Status not written yet: HTTP {status}"
+
+
+async def test_document_gone_before_the_status_write_fails_without_a_reason(make_api, source_app, published_on):
+    gone = flaky(source_app, failures=99, path="/documents/doc-1/status", status=404)
+    finished = await published_on(await make_api(source=gone))
+    assert (finished["state"], finished["statusReported"]) == ("failed", False)
+    assert finished["error"] == "Document not found in Source; the status cannot be written."  # Published: no reason
+
+
+async def test_unexpected_error_in_the_status_write_leaves_the_job_running(published, monkeypatch, caplog):
+    async def broken(*args):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(SourceClient, "set_status", broken)
+    finished = await published("doc-1")
+    assert (finished["state"], finished["error"]) == ("running", "Status not written yet: boom")
+    assert f"Job {finished['id']}: unexpected error" in caplog.text  # logged, not silent
+
+
+async def test_unexpected_error_before_the_outcome_gives_error(published, monkeypatch, settings):
+    async def broken(*args):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(Runner, "_decide_outcome", broken)
+    finished = await published("doc-1")
+    assert (finished["state"], finished["error"]) == ("running", "Status not written yet: boom")
+    record = saved(settings)
+    assert (record["outcome"], record["outcome_message"]) == ("Error", "boom")
+
+
+async def test_failure_after_the_status_was_written_still_ends_the_job(published, monkeypatch, settings, caplog):
+    save, failed = JobStore.save, []
+
+    def save_failing_once_after_the_status(store, job):
+        if job.status_reported and not failed:
+            failed.append(job)
+            raise OSError("disk full")
+        save(store, job)
+
+    monkeypatch.setattr(JobStore, "save", save_failing_once_after_the_status)
+    finished = await published("doc-1")
+    assert failed  # the first final save did fail
+    record = saved(settings)
+    assert (record["state"], record["error"], record["status_reported"]) == ("done", None, True)
+    assert f"Job {finished['id']}: unexpected error" in caplog.text

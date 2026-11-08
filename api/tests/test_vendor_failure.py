@@ -24,7 +24,9 @@ async def test_gives_up_after_three_failures_and_keeps_the_archive_copy(publishe
     assert finished["error"] == "Delivering to the Vendor failed: HTTP 503"
     assert (finished["vendorAttempts"], finished["vendorReceipt"]) == (3, None)
     assert vendor_app.state.deliveries == {}
-    assert source_app.state.documents["doc-1"].content is None  # deleted before delivery
+    stored = source_app.state.documents["doc-1"]
+    assert stored.content is None  # deleted before delivery
+    assert (stored.status, stored.status_message) == ("Error", "Delivering to the Vendor failed: HTTP 503")
     assert (settings.data_dir / "archive" / finished["archivePath"]).exists()
 
 

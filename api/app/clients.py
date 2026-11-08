@@ -3,6 +3,7 @@ import httpx
 from pydantic import TypeAdapter, ValidationError
 
 from .models.documents import Document
+from .models.jobs import Outcome
 from .models.vendor import Receipt
 
 _DOCUMENT = TypeAdapter(Document)
@@ -16,11 +17,13 @@ class UpstreamError(Exception):
     """A call to Source or Vendor failed; the message says how.
 
     `temporary` failures (network, timeout, 429, 5xx) may succeed when repeated.
+    `status` is the HTTP status of a refused call, otherwise None.
     """
 
-    def __init__(self, message: str, *, temporary: bool = False):
+    def __init__(self, message: str, *, temporary: bool = False, status: int | None = None):
         super().__init__(message)
         self.temporary = temporary
+        self.status = status
 
 
 async def _send(http: httpx.AsyncClient, method: str, path: str, **kwargs) -> httpx.Response:
@@ -30,7 +33,7 @@ async def _send(http: httpx.AsyncClient, method: str, path: str, **kwargs) -> ht
         raise UpstreamError(type(exc).__name__, temporary=isinstance(exc, _TEMPORARY_TRANSPORT_ERRORS)) from exc
     if not response.is_success:
         temporary = response.status_code == 429 or response.is_server_error
-        raise UpstreamError(f"HTTP {response.status_code}", temporary=temporary)
+        raise UpstreamError(f"HTTP {response.status_code}", temporary=temporary, status=response.status_code)
     return response
 
 
@@ -64,6 +67,10 @@ class SourceClient:
 
     async def delete_document(self, document_id: str) -> None:
         await _send(self._http, "DELETE", f"/documents/{document_id}")
+
+    async def set_status(self, document_id: str, status: Outcome, message: str | None) -> None:
+        body = {"status": status, "message": message}
+        await _send(self._http, "PUT", f"/documents/{document_id}/status", json=body)
 
 
 class VendorClient:
