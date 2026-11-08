@@ -22,13 +22,15 @@ class Job(BaseModel):
     error: str | None = None
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
-    # Checkpoints of steps 2-4.
+    # Checkpoints of steps 2-5.
     filename: str | None = None
     content_type: str | None = None
     archive_path: str | None = None
     sha256: str | None = None
     archive_linked: bool = False
     source_deleted: bool = False
+    vendor_receipt: str | None = None  # the Vendor's receipt id, proof of delivery; None until the Vendor confirms
+    vendor_attempts: int = 0  # a counter, never reset
 
 
 class JobOut(BaseModel):
@@ -44,6 +46,8 @@ class JobOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     archive_path: str | None
+    vendor_attempts: int
+    vendor_receipt: str | None
 
 
 class PublishRequest(BaseModel):

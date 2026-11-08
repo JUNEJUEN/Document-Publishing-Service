@@ -78,13 +78,13 @@ One `docker compose up --build` starts all four.
 | Unit | Responsibility | Uses |
 |---|---|---|
 | `config` | Reads settings from environment variables (section 10) | — |
-| `models/` | Pydantic models, one module per resource: `documents.py` (`Document`, Source's metadata), `jobs.py` (`Job`, `JobOut`, `PublishRequest`) | — |
+| `models/` | Pydantic models, one module per resource: `documents.py` (`Document`, Source's metadata), `jobs.py` (`Job`, `JobOut`, `PublishRequest`), `vendor.py` (`Receipt`) | — |
 | `auth` | Issues tokens; checks the bearer token | `config`, `dependencies` |
 | `store` | Jobs in memory plus JSON files; finds a job by document | `models` |
 | `archive` | Writes a file durably to a stable path; verifies it by sha256 | — |
 | `clients` | Source and Vendor HTTP calls; sorts failures into temporary or permanent | — |
 | `backoff` | Retry helper with exponential backoff and full jitter | `clients` (error types) |
-| `runner` | Runs jobs as asyncio tasks, limited by a semaphore; startup handling; retries; retry cron | `store`, `archive`, `clients`, `backoff` |
+| `runner` | Runs jobs as asyncio tasks, limited by a semaphore; startup handling; retries; retry cron | `store`, `archive`, `clients`, `backoff`, `config` |
 | `routers/` | HTTP endpoints, one FastAPI `APIRouter` module per area: `health.py`, `auth.py`, `documents.py`, `jobs.py` | `auth`, `dependencies`, `models`, `clients`, `store`, `runner` |
 | `dependencies` | FastAPI dependencies that hand shared objects (settings, Source client, job store, runner) from `app.state` to routes | `config`, `clients`, `store`, `runner` |
 | `main` | `create_app()`: builds settings and clients, adds CORS, includes the routers, runs startup and shutdown | `routers`, `clients`, `config`, `archive`, `store`, `runner` |
@@ -254,8 +254,8 @@ Failures fall into two kinds:
 | Permanent | any other 4xx, archive hash mismatch, our own bugs | not retried; the step fails |
 
 **How temporary failures are retried:**
-- Each Source call and each Vendor delivery gets up to 5 attempts.
-- The wait before retry *n* (that is, attempt *n*+1) is a random value between 0 and `min(RETRY_MAX_DELAY, RETRY_BASE_DELAY × 2^(n-1))`. With the defaults that is up to 0.5 s, 1 s, 2 s, then 4 s.
+- Each Source call and each Vendor delivery gets up to 3 attempts.
+- The wait before retry *n* (that is, attempt *n*+1) is a random value between 0 and `min(RETRY_MAX_DELAY, RETRY_BASE_DELAY × 2^(n-1))`. With the defaults that is up to 0.5 s, then 1 s.
 
 **Repeating a step is always harmless:**
 - **Read:** the same request, sent again.
@@ -271,7 +271,7 @@ Failures fall into two kinds:
 | Step 2 archive (disk full, hash mismatch) | untouched | Error |
 | Step 3 link | untouched | Error |
 | Step 4 check or delete | untouched, or deleted with the answer lost (5.4) | Error |
-| Step 5, vendor fails 5 times | deleted; archive kept | Error, with the vendor's last answer |
+| Step 5, vendor fails 3 times | deleted; archive kept | Error, with the vendor's last answer |
 | Step 6 status, 404 | (any) | Job `failed`, status not written; a documented exception to R4 (4.4) |
 | Step 6 status, anything else | (any) | Job is set to `running` (also from `queued`); retried by the cron, no limit (4.4) |
 
@@ -308,7 +308,7 @@ The manual endpoint and the retry cron share one function, `retry(job, automatic
 
 ### 5.4 Worked example: a delete whose answer was lost
 
-1. The `DELETE` in step 4 succeeds on Source, but the answer times out, and all 5 attempts fail while Source is down.
+1. The `DELETE` in step 4 succeeds on Source, but the answer times out, and all 3 attempts fail while Source is down.
 2. The outcome is `Error`; `source_deleted` is still false and `archive_path` is set.
 3. On retry, the archive copy passes its hash check, so the archive checkpoints are kept.
 4. Step 3 is skipped, because `archive_linked` is already set.
@@ -380,10 +380,10 @@ Returned by the job endpoints.
 | `requestId` | string | `"7b0c…"` |
 | `documentId` | string | `"doc-1"` |
 | `state` | `queued` \| `running` \| `done` \| `failed` | `"failed"` |
-| `error` | string \| null | `"Vendor API answered 503"` |
+| `error` | string \| null | `"Delivering to the Vendor failed: HTTP 503"` |
 | `createdAt`, `updatedAt` | ISO 8601 UTC | `"2026-11-08T10:00:00Z"` |
 | `archivePath` | string \| null | `"doc-1/9a4e…/doc-1.txt"` |
-| `vendorAttempts` | int | `5` |
+| `vendorAttempts` | int | `3` |
 | `vendorReceipt` | string \| null | `null` |
 | `statusReported` | bool | `true` |
 | `autoRetries` | int | `2` |
@@ -537,7 +537,7 @@ Section 11 describes the `tests` and `lint` services.
 
 **Test helpers:**
 - `publish()`
-- `job()`
+- `published()` and `published_on(api)`: publish, wait, and return the finished Job object
 - `settle()`: waits for all running tasks
 - `run_cron_once()`: one run of the retry cron, called directly with no waiting
 
@@ -545,7 +545,7 @@ Section 11 describes the `tests` and `lint` services.
 |---|---|
 | `api/tests/test_auth.py` **(brief: rejected unauthenticated call)** | <ul><li>Anonymous `/publish` gets 401, with no job created and no Source or Vendor calls.</li><li>Every bad-token case from section 6 gets 401.</li><li>An expired or forged token gets 401.</li><li>A broken body without a token gets 401.</li><li>Token endpoint gets 401 for: wrong values; a missing field; a JSON body; a non-ASCII value.</li><li>A valid login works.</li><li>`/documents`, `/jobs`, `/jobs/{id}` and `/jobs/{id}/retry` without a token get 401.</li><li>A broken body with a token gets 422.</li><li>A `documentId` that tries to leave the archive folder gets 422.</li></ul> |
 | `api/tests/test_idempotency.py` **(brief: retry rule, i.e. the caller retries)** | <ul><li>Same `requestId` twice: same job, 1 delivery, 1 delete.</li><li>10 simultaneous duplicates: 1 job.</li><li>Duplicate after the job finished: same job.</li><li>Duplicate after a restart: same job, no new delivery.</li><li>New `requestId` for the same document: same job.</li></ul> |
-| `api/tests/test_vendor_failure.py` **(brief: vendor failure)** | <ul><li>Outcomes fail, fail, fail-after-store, ok: `done`, 4 attempts, 1 delivery.</li><li>Fail-after-store twice: 1 delivery.</li><li>5 failures: `failed`, `Error` in Source, archive copy kept, `nextRetryAt` shows the next cron run.</li></ul> |
+| `api/tests/test_vendor_failure.py` **(brief: vendor failure)** | <ul><li>Outcomes fail, fail-after-store, ok: `done`, 3 attempts, 1 delivery.</li><li>Fail-after-store twice: 1 delivery.</li><li>3 failures: `failed`, `Error` in Source, archive copy kept, `nextRetryAt` shows the next cron run.</li></ul> |
 | `api/tests/test_retry.py` | <ul><li>Manual retry after a vendor failure: `done`, 1 delivery, Source shows `Published`.</li><li>Retry of a job that isn't `failed`: 409.</li><li>Retry while the job's last run is still finishing: 409 (uses an injected fake pending task).</li><li>Retry with a damaged archive after a lost delete answer: checkpoints kept, "manual action needed".</li><li>Damaged archive and a metadata read that fails: checkpoints kept.</li><li>Retry after a lost delete answer (5.4): archive kept, delivered.</li><li>Retry with a damaged archive while the original still exists: re-read from Source.</li><li>A cron run retries every failed job.</li><li>The cron skips jobs at `AUTO_RETRY_MAX`.</li><li>The cron retries a waiting status write without a limit.</li><li>An exception in one run doesn't stop the cron.</li><li>Manual retry and a cron run together: 1 run.</li><li>A `queued` job with no task is resubmitted by the cron.</li><li>`nextRetryAt` shows the next cron run for eligible jobs, and is `null` otherwise or while the job has a task.</li><li>A retry after a vendor failure skips steps 1–4.</li></ul> |
 | `api/tests/test_pipeline.py` | <ul><li>Call order across both stubs: get, get_content, archive_link, delete, vendor post, status.</li><li>With `MAX_CONCURRENT_JOBS=2`, 5 publishes run at most 2 at a time, while the others show `queued`.</li><li>The original is kept when archiving fails.</li><li>The original is kept when the archive copy is damaged before the delete.</li><li>An unknown document never reaches the vendor.</li><li>A status write refused with a 5xx or a 4xx other than 404 sets the job to `running`, and the next cron run writes it.</li><li>An unknown document (status write gets 404) ends `failed` with the "cannot be written" message, and Retry works.</li><li>An unexpected exception in step 6 doesn't kill the job.</li><li>A failure after the status was written still leaves the job `done` or `failed`, never `running`.</li><li>An unexpected exception before the outcome is set gives `Error`.</li><li>A damaged or missing archive copy after the delete is never sent to the vendor.</li><li>An empty exception message becomes the type name.</li><li>Long messages are cut to 500 characters.</li></ul> |
 | `api/tests/test_jobs.py` | <ul><li>`POST /publish` answers 202 with the Job object.</li><li>A finished job shows its archive path.</li><li>`GET /jobs` is newest first.</li><li>An unknown job id gets 404.</li></ul> |
@@ -569,7 +569,7 @@ The stubs have no tests of their own. The API tests run against the real stub ap
 | `SOURCE_API_URL`, `VENDOR_API_URL` | `http://source-stub:8001`, `http://vendor-stub:8002` | Upstream addresses |
 | `DATA_DIR` | `/data` | Archive and job files |
 | `HTTP_TIMEOUT` | 10 | Seconds allowed for each step of an upstream call (connect, read, write) |
-| `SOURCE_MAX_ATTEMPTS`, `VENDOR_MAX_ATTEMPTS` | 5, 5 | Quick attempts inside a run |
+| `SOURCE_MAX_ATTEMPTS`, `VENDOR_MAX_ATTEMPTS` | 3, 3 | Quick attempts inside a run |
 | `RETRY_BASE_DELAY`, `RETRY_MAX_DELAY` | 0.5, 8 | Backoff, in seconds |
 | `AUTO_RETRY_INTERVAL` | 3600 | Seconds between retry cron runs |
 | `AUTO_RETRY_MAX` | 24 | Limit for automatic retries of steps 1–5 |
@@ -629,8 +629,8 @@ A feature only uses things built in earlier features. Its tests only cover what 
 | 3 | Vendor API stub | 7.4 | No tests of its own, an exception to the CLAUDE.md test-first flow approved by the owner. Checked by hand with `curl` under Compose, and exercised by the API tests from feature 7 on. |
 | 4 | Login: token endpoint, token check, CORS, login page | 6, 7.2, 8 | `test_auth.py` here covers the token endpoint and the token check. Its cases for `/documents` are written in feature 5. Its cases for `/publish` (anonymous call, broken bodies, escaping id), `/jobs` and `/jobs/{id}` are written in feature 6, including the brief's required rejected-call test. Its case for `/jobs/{id}/retry` is written in feature 10. |
 | 5 | Document list: `GET /documents` and the documents table | D14, 7.2, 8 | The table's Publish buttons are added in feature 6. |
-| 6 | Publish: the document-id field and the row Publish buttons, steps 1–4, archive, job store, duplicates, job list, Job object, concurrency limit (test in `test_pipeline.py`). Any failure in steps 1–4 sets `failed` with the error. | 1 (R2, R3), 2 (D5), 3, 4.1–4.3, 5.5, 7.1 (without `vendorAttempts`, `vendorReceipt`, `statusReported` and the retry fields), 7.2, 8 | No status write yet. The `test_idempotency.py` "1 delivery" checks are written in feature 7; "duplicate after a restart" in feature 9. In `test_pipeline.py`, the call-order test grows with features 7 and 8. Until features 7 and 8, a run that passes step 4 ends `done`. Starting a run from its checkpoints (4.2) comes with retry in feature 10. |
-| 7 | Vendor delivery (step 5); quick retries for both Source and Vendor calls | 4.2, 5.1 | In `test_vendor_failure.py`, "Error in Source" is written in feature 8, and "`nextRetryAt` shows the next cron run" in feature 11. |
+| 6 | Publish: the document-id field and the row Publish buttons, steps 1–4, archive, job store, duplicates, job list, Job object, concurrency limit (test in `test_pipeline.py`). Any failure in steps 1–4 sets `failed` with the error. | 1 (R2, R3), 2 (D5), 3, 4.1–4.3, 5.5, 7.1 (without `vendorAttempts`, `vendorReceipt`, `statusReported` and the retry fields), 7.2, 8 | No status write yet. The `test_idempotency.py` "1 delivery" checks are written in feature 7; "duplicate after a restart" in feature 9. In `test_pipeline.py`, the call-order test grows with features 7 and 8. Until feature 7, a run that passes step 4 ends `done`. Starting a run from its checkpoints (4.2) comes with retry in feature 10. |
+| 7 | Vendor delivery (step 5); quick retries for both Source and Vendor calls | 4.2, 5.1 | In `test_vendor_failure.py`, "Error in Source" is written in feature 8, and "`nextRetryAt` shows the next cron run" in feature 11. Until feature 8, a run that passes step 5 ends `done`. In the tests, `make_api` takes `source=` and `vendor=` transports, and the event log fixture is `events`. |
 | 8 | Status write-back (step 6); the job completes; final-state rules and outer guard | 4.3–4.5, 5.2 | A failed status write leaves the job `running`; writing it again comes with the cron, and its test is written in feature 11. The "404, then Retry works" test is written in feature 10. |
 | 9 | Restart handling: interrupted jobs, corrupt and temp job files, shutdown | 4.1, 4.6 | The "delivered on retry" tests for interrupted jobs are written in feature 10. |
 | 10 | Retry button and `retry()` | 3 (rule 2), 4.2 (checking an existing archive copy), 5.3, 5.4, 7.2, 8 | Also adds the deferred tests from features 4, 8 and 9. "Manual retry and a cron run together" is written in feature 11. |

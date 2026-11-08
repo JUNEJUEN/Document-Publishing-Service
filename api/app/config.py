@@ -10,8 +10,12 @@ DEFAULT_TOKEN_TTL = 300
 DEFAULT_DATA_DIR = Path("/data")
 DEFAULT_ORIGINS = ("http://localhost:8080",)
 DEFAULT_SOURCE_API_URL = "http://source-stub:8001"
+DEFAULT_VENDOR_API_URL = "http://vendor-stub:8002"
 DEFAULT_HTTP_TIMEOUT = 10.0
 DEFAULT_MAX_CONCURRENT_JOBS = 10
+DEFAULT_MAX_ATTEMPTS = 3
+DEFAULT_RETRY_BASE_DELAY = 0.5
+DEFAULT_RETRY_MAX_DELAY = 8.0
 
 
 def _positive_number(
@@ -43,8 +47,13 @@ class Settings:
     data_dir: Path = DEFAULT_DATA_DIR
     cors_origins: tuple[str, ...] = DEFAULT_ORIGINS
     source_api_url: str = DEFAULT_SOURCE_API_URL
+    vendor_api_url: str = DEFAULT_VENDOR_API_URL
     http_timeout: float = DEFAULT_HTTP_TIMEOUT
     max_concurrent_jobs: int = DEFAULT_MAX_CONCURRENT_JOBS
+    source_max_attempts: int = DEFAULT_MAX_ATTEMPTS
+    vendor_max_attempts: int = DEFAULT_MAX_ATTEMPTS
+    retry_base_delay: float = DEFAULT_RETRY_BASE_DELAY
+    retry_max_delay: float = DEFAULT_RETRY_MAX_DELAY
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -61,6 +70,11 @@ class Settings:
             data_dir=Path(env.get("DATA_DIR") or DEFAULT_DATA_DIR),
             cors_origins=origins or DEFAULT_ORIGINS,
             source_api_url=env.get("SOURCE_API_URL") or DEFAULT_SOURCE_API_URL,
+            vendor_api_url=env.get("VENDOR_API_URL") or DEFAULT_VENDOR_API_URL,
             http_timeout=_positive_float(env, "HTTP_TIMEOUT", DEFAULT_HTTP_TIMEOUT),
             max_concurrent_jobs=_positive_int(env, "MAX_CONCURRENT_JOBS", DEFAULT_MAX_CONCURRENT_JOBS),
+            source_max_attempts=_positive_int(env, "SOURCE_MAX_ATTEMPTS", DEFAULT_MAX_ATTEMPTS),
+            vendor_max_attempts=_positive_int(env, "VENDOR_MAX_ATTEMPTS", DEFAULT_MAX_ATTEMPTS),
+            retry_base_delay=_positive_float(env, "RETRY_BASE_DELAY", DEFAULT_RETRY_BASE_DELAY),
+            retry_max_delay=_positive_float(env, "RETRY_MAX_DELAY", DEFAULT_RETRY_MAX_DELAY),
         )

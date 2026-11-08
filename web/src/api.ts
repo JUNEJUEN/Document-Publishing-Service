@@ -24,6 +24,8 @@ export interface Job {
   createdAt: string
   updatedAt: string
   archivePath: string | null
+  vendorAttempts: number
+  vendorReceipt: string | null
 }
 
 class ApiError extends Error {

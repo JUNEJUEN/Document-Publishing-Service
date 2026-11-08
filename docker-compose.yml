@@ -43,6 +43,7 @@ services:
       TOKEN_SECRET: ${TOKEN_SECRET:-local-demo-token-secret-change-me-0123456789}
       CORS_ORIGINS: http://localhost:8080
       SOURCE_API_URL: http://source-stub:8001
+      VENDOR_API_URL: http://vendor-stub:8002
       TOKEN_TTL_SECONDS: ${TOKEN_TTL_SECONDS:-300}
     ports: ["8000:8000"]
     volumes:

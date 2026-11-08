@@ -11,7 +11,10 @@ REQUIRED = {
 }
 
 
-OPTIONAL = ("DATA_DIR", "TOKEN_TTL_SECONDS", "CORS_ORIGINS", "SOURCE_API_URL", "HTTP_TIMEOUT", "MAX_CONCURRENT_JOBS")
+OPTIONAL = (
+    "DATA_DIR", "TOKEN_TTL_SECONDS", "CORS_ORIGINS", "SOURCE_API_URL", "VENDOR_API_URL", "HTTP_TIMEOUT",
+    "MAX_CONCURRENT_JOBS", "SOURCE_MAX_ATTEMPTS", "VENDOR_MAX_ATTEMPTS", "RETRY_BASE_DELAY", "RETRY_MAX_DELAY",
+)
 
 
 @pytest.fixture
@@ -34,8 +37,11 @@ def test_defaults(env):
     assert settings.token_ttl_seconds == 300
     assert settings.cors_origins == ("http://localhost:8080",)
     assert settings.source_api_url == "http://source-stub:8001"
+    assert settings.vendor_api_url == "http://vendor-stub:8002"
     assert settings.http_timeout == 10.0
     assert settings.max_concurrent_jobs == 10
+    assert (settings.source_max_attempts, settings.vendor_max_attempts) == (3, 3)
+    assert (settings.retry_base_delay, settings.retry_max_delay) == (0.5, 8.0)
 
 
 def test_optional_settings_come_from_environment(env, tmp_path):
@@ -45,6 +51,11 @@ def test_optional_settings_come_from_environment(env, tmp_path):
     env.setenv("SOURCE_API_URL", "http://src.test")
     env.setenv("HTTP_TIMEOUT", "2.5")
     env.setenv("MAX_CONCURRENT_JOBS", "3")
+    env.setenv("VENDOR_API_URL", "http://vendor.test")
+    env.setenv("SOURCE_MAX_ATTEMPTS", "2")
+    env.setenv("VENDOR_MAX_ATTEMPTS", "7")
+    env.setenv("RETRY_BASE_DELAY", "0.1")
+    env.setenv("RETRY_MAX_DELAY", "2")
     settings = Settings.from_env()
     assert settings.data_dir == tmp_path
     assert settings.token_ttl_seconds == 60
@@ -52,13 +63,18 @@ def test_optional_settings_come_from_environment(env, tmp_path):
     assert settings.source_api_url == "http://src.test"
     assert settings.http_timeout == 2.5
     assert settings.max_concurrent_jobs == 3
+    assert settings.vendor_api_url == "http://vendor.test"
+    assert (settings.source_max_attempts, settings.vendor_max_attempts) == (2, 7)
+    assert (settings.retry_base_delay, settings.retry_max_delay) == (0.1, 2.0)
 
 
 def test_empty_values_fall_back_to_defaults(env):
     env.setenv("SOURCE_API_URL", "")
+    env.setenv("VENDOR_API_URL", "")
     env.setenv("DATA_DIR", "")
     settings = Settings.from_env()
     assert settings.source_api_url == "http://source-stub:8001"
+    assert settings.vendor_api_url == "http://vendor-stub:8002"
     assert settings.data_dir == Path("/data")
 
 
@@ -92,4 +108,11 @@ def test_missing_required_settings_stop_startup(env):
 def test_max_concurrent_jobs_must_be_positive(env, limit):
     env.setenv("MAX_CONCURRENT_JOBS", limit)
     with pytest.raises(ValueError, match="MAX_CONCURRENT_JOBS"):
+        Settings.from_env()
+
+
+@pytest.mark.parametrize("name", ["SOURCE_MAX_ATTEMPTS", "VENDOR_MAX_ATTEMPTS", "RETRY_BASE_DELAY", "RETRY_MAX_DELAY"])
+def test_retry_settings_must_be_positive(env, name):
+    env.setenv(name, "0")
+    with pytest.raises(ValueError, match=name):
         Settings.from_env()

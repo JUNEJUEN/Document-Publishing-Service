@@ -40,12 +40,17 @@ class Archive:
                 raise ArchiveError("archive copy failed its hash check")
         return relative, digest
 
+    def read(self, relative: str, digest: str) -> bytes | None:
+        """The archive copy, or None when it can't be read or its sha256 differs."""
+        try:
+            content = self._path(relative).read_bytes()
+        except OSError:
+            return None
+        return content if _sha256(content) == digest else None
+
     def matches(self, relative: str, digest: str) -> bool:
         """True when the archive copy can be read and has this sha256."""
-        try:
-            return _sha256(self._path(relative).read_bytes()) == digest
-        except OSError:
-            return False
+        return self.read(relative, digest) is not None
 
     def _path(self, relative: str) -> Path:
         path = (self._root / relative).resolve()

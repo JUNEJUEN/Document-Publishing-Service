@@ -6,7 +6,10 @@ import { jobList, startPolling, stopPolling } from '../jobs'
 const LABELS: Record<JobState, string> = { queued: 'Waiting', running: 'Running', done: 'Done', failed: 'Failed' }
 
 function details(job: Job): string {
-  return job.state === 'done' ? `Archived as ${job.archivePath}` : (job.error ?? '')
+  // Jobs finished before vendor delivery existed have no receipt.
+  if (job.state === 'done') return job.vendorReceipt ? `Vendor receipt ${job.vendorReceipt}` : ''
+  if (job.state === 'failed') return job.error ?? ''
+  return job.error ?? `Vendor attempts so far: ${job.vendorAttempts}`
 }
 
 onMounted(startPolling)

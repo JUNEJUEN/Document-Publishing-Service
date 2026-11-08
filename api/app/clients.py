@@ -1,16 +1,37 @@
 """HTTP clients for the external systems."""
-
 import httpx
 from pydantic import TypeAdapter, ValidationError
 
 from .models.documents import Document
+from .models.vendor import Receipt
 
 _DOCUMENT = TypeAdapter(Document)
 _DOCUMENT_LIST = TypeAdapter(list[Document])
+_RECEIPT = TypeAdapter(Receipt)
+# Transport failures that may pass on a repeat; others (e.g. a bad URL) never will.
+_TEMPORARY_TRANSPORT_ERRORS = (httpx.TimeoutException, httpx.NetworkError, httpx.RemoteProtocolError)
 
 
 class UpstreamError(Exception):
-    """A call to Source or Vendor failed; the message says how."""
+    """A call to Source or Vendor failed; the message says how.
+
+    `temporary` failures (network, timeout, 429, 5xx) may succeed when repeated.
+    """
+
+    def __init__(self, message: str, *, temporary: bool = False):
+        super().__init__(message)
+        self.temporary = temporary
+
+
+async def _send(http: httpx.AsyncClient, method: str, path: str, **kwargs) -> httpx.Response:
+    try:
+        response = await http.request(method, path, **kwargs)
+    except httpx.HTTPError as exc:
+        raise UpstreamError(type(exc).__name__, temporary=isinstance(exc, _TEMPORARY_TRANSPORT_ERRORS)) from exc
+    if not response.is_success:
+        temporary = response.status_code == 429 or response.is_server_error
+        raise UpstreamError(f"HTTP {response.status_code}", temporary=temporary)
+    return response
 
 
 def _parse[T](response: httpx.Response, adapter: TypeAdapter[T], what: str) -> T:
@@ -28,31 +49,29 @@ class SourceClient:
     def __init__(self, http: httpx.AsyncClient):
         self._http = http
 
-    # API to get document lists (file name, file id, etc)
     async def list_documents(self) -> list[Document]:
-        return _parse(await self._call("GET", "/documents"), _DOCUMENT_LIST, "a document list")
+        return _parse(await _send(self._http, "GET", "/documents"), _DOCUMENT_LIST, "a document list")
 
-    # API to get 1 document (file name, file id, etc)
     async def get_document(self, document_id: str) -> Document:
-        return _parse(await self._call("GET", f"/documents/{document_id}"), _DOCUMENT, "a document")
+        return _parse(await _send(self._http, "GET", f"/documents/{document_id}"), _DOCUMENT, "a document")
 
-    # API to get 1 documment file content
     async def get_content(self, document_id: str) -> bytes:
-        return (await self._call("GET", f"/documents/{document_id}/content")).content
+        return (await _send(self._http, "GET", f"/documents/{document_id}/content")).content
 
-    # API to update the archive link of 1 document
     async def set_archive_link(self, document_id: str, uri: str, sha256: str) -> None:
-        await self._call("PUT", f"/documents/{document_id}/archive-link", json={"uri": uri, "sha256": sha256})
+        body = {"uri": uri, "sha256": sha256}
+        await _send(self._http, "PUT", f"/documents/{document_id}/archive-link", json=body)
 
-    # API to delete 1 document
     async def delete_document(self, document_id: str) -> None:
-        await self._call("DELETE", f"/documents/{document_id}")
+        await _send(self._http, "DELETE", f"/documents/{document_id}")
 
-    async def _call(self, method: str, path: str, **kwargs) -> httpx.Response:
-        try:
-            response = await self._http.request(method, path, **kwargs)
-        except httpx.HTTPError as exc:
-            raise UpstreamError(type(exc).__name__) from exc
-        if not response.is_success:
-            raise UpstreamError(f"HTTP {response.status_code}")
-        return response
+
+class VendorClient:
+    def __init__(self, http: httpx.AsyncClient):
+        self._http = http
+
+    async def deliver(self, key: str, filename: str, content_type: str, content: bytes) -> str:
+        """Uploads the file and returns the receipt id; the same key never stores it twice."""
+        files = {"file": (filename, content, content_type)}
+        response = await _send(self._http, "POST", "/files", files=files, headers={"Idempotency-Key": key})
+        return _parse(response, _RECEIPT, "a receipt").receipt_id
