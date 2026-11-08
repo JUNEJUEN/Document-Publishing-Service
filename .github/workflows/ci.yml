@@ -1,0 +1,65 @@
+# Runs the same commands as a developer machine (spec section 11).
+name: CI
+
+on:
+  # Other branches are checked through their pull request, so nothing runs twice.
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+# A newer push to a pull request cancels its older run; every main run gets its own group.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend lint and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false # the tests mount the checkout; no token in it
+      - name: Build the test image
+        run: docker compose build tests
+      - name: Lint
+        run: docker compose run --rm -T lint
+      - name: Tests
+        run: docker compose run --rm -T tests
+
+  frontend:
+    name: Frontend type-check and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Type-check and build
+        run: npm run build
+
+  images:
+    name: Docker images
+    needs: [backend, frontend]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Build every service image
+        run: docker compose build
