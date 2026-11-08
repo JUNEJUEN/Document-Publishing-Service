@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { fetchDocuments, type SourceDocument } from '../api'
 import { errorMessage } from '../http'
-import { jobList, publishDocument } from '../jobs'
+import { jobList, publishAll, publishDocument } from '../jobs'
 import PublishForm from './PublishForm.vue'
 
 const documents = ref<SourceDocument[]>([])
@@ -11,6 +11,12 @@ const busy = ref(false)
 const error = ref('')
 const publishError = ref('')
 const publishing = reactive(new Set<string>())
+const publishingAll = ref(false)
+// Documents with a job already are skipped: publishing them again starts nothing.
+const withJob = computed(() => new Set(jobList.jobs.map((job) => job.documentId)))
+const publishable = computed(() =>
+  documents.value.filter((doc) => !doc.deleted && !withJob.value.has(doc.id)).map((doc) => doc.id),
+)
 let latest = 0 // only the newest refresh may update the table
 
 async function refresh() {
@@ -43,6 +49,23 @@ async function publishRow(documentId: string) {
   }
 }
 
+async function publishEverything() {
+  const ids = publishable.value
+  const count = `${ids.length} document${ids.length === 1 ? '' : 's'}`
+  // Publishing deletes the originals in Source, so ask first.
+  if (!window.confirm(`Publish ${count}? The originals will be deleted from Source.`)) return
+  publishingAll.value = true
+  publishError.value = ''
+  try {
+    const failures = await publishAll(ids)
+    if (failures.length) {
+      publishError.value = `${failures.length} of ${ids.length} could not be published: ${failures.join('; ')}`
+    }
+  } finally {
+    publishingAll.value = false
+  }
+}
+
 // A finished job has changed the document in Source.
 const finishedJobs = computed(() =>
   jobList.jobs
@@ -59,7 +82,15 @@ onMounted(refresh)
   <section class="card">
     <div class="card-head">
       <h2>Publish documents</h2>
-      <button class="secondary" :disabled="busy" @click="refresh">{{ busy ? 'Refreshing…' : 'Refresh' }}</button>
+      <div class="actions">
+        <button
+          :disabled="!jobList.loaded || publishingAll || publishing.size > 0 || publishable.length === 0"
+          @click="publishEverything"
+        >
+          {{ publishingAll ? 'Publishing…' : 'Publish all' }}
+        </button>
+        <button class="secondary" :disabled="busy" @click="refresh">{{ busy ? 'Refreshing…' : 'Refresh' }}</button>
+      </div>
     </div>
     <PublishForm />
     <h3>Documents in Source</h3>
@@ -79,7 +110,7 @@ onMounted(refresh)
             <td>{{ doc.size === null ? '—' : `${doc.size} B` }}</td>
             <td>{{ doc.status }}<span v-if="doc.deleted" class="muted"> · deleted</span></td>
             <td>
-              <button :disabled="doc.deleted || publishing.has(doc.id)" @click="publishRow(doc.id)">
+              <button :disabled="doc.deleted || publishingAll || publishing.has(doc.id)" @click="publishRow(doc.id)">
                 {{ publishing.has(doc.id) ? 'Publishing…' : 'Publish' }}
               </button>
             </td>

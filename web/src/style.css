@@ -34,6 +34,7 @@ button.secondary { background: transparent; color: var(--accent); border: 1px so
 .notice { background: var(--wait-bg); padding: 8px 12px; border-radius: 6px; }
 .card-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 8px; }
 .card-head h2 { margin: 0; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .publish-form { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; }
 .publish-form label { margin-bottom: 0; }
 table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }

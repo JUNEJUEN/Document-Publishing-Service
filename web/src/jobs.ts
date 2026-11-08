@@ -45,3 +45,12 @@ export async function publishDocument(documentId: string): Promise<void> {
   await publish(documentId)
   await refreshJobs()
 }
+
+/** Publishes all the given documents at once; returns a message per document that failed. */
+export async function publishAll(documentIds: string[]): Promise<string[]> {
+  const results = await Promise.allSettled(documentIds.map(publish))
+  await refreshJobs()
+  return results.flatMap((result, i) =>
+    result.status === 'rejected' ? [`${documentIds[i]}: ${errorMessage(result.reason)}`] : [],
+  )
+}
